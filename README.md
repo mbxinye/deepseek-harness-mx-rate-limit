@@ -107,10 +107,15 @@ dsh plugin --profile desktop install
 
 ### 方式 A：设置页（推荐）
 
-设置 → 插件 → **请求限速**。本插件自带客户端半边，装上即可用。
+左侧边栏点 **插件**（不是「设置」）。页面顶部是 **官方** 分组，组里有一张卡片：
 
-页面上能改：总开关、计入范围（仅主对话 / 含辅助请求）、以及每个 route 一行
-的 7 个字段。保存后写回你的 profile patch，**立即生效，不用重启**。
+> **请求限速** —— 在请求到达 provider 之前，按 route 的配额排队。
+
+点开就是配置页。能改：总开关、计入范围（仅主对话 / 含辅助请求）、以及每个 route
+一行的 7 个字段。保存后写回你的 profile patch，**立即生效，不用重启**。
+
+> 这一页在**插件页**的「官方」分组里，和 `Agent 循环`、`子智能体`、`网页搜索`
+> 并列。它不在「设置」页面下面 —— 那里找不到是正常的，不是装坏了。
 
 在 `llm-pi-ai` 的设置里可以看到你现有的 route id，把它们填进「受限的 route」：
 
@@ -244,7 +249,8 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 |---|---|
 | **加载报找不到入口 / `lib/index.js`** | 本地目录安装时忘了 `npm run build`。Git 安装不该出现 —— `lib/` 已随仓库提交 |
 | **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | `node_modules/.pnpm/lock.yaml` 里钉着旧 commit（那个版本还有 `prepare` 脚本）。删掉 profile 的 `node_modules` 重装 |
-| 插件页里看不到「请求限速」 | ① 确认 `bundles` 里有它并重启过；② 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 —— 客户端 bundle 是 `lib/client.js`，它注册进浏览器模块表，任一 import 不在表里都会在启动时抛错 |
+| 插件页里看不到「请求限速」 | ① 先确认你在**插件**页而不是「设置」页；它在**官方**分组里，和 `Agent 循环` 并列。② 确认 profile `package.json` 的 `dsh.profile.bundles` 里有它，且重启过。③ 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 —— 客户端 bundle 是 `lib/client.js`，它注册进浏览器模块表，任一 import 不在表里都会在启动时抛错 |
+| 用 app 里的安装器装完还是旧的 | 安装器解析 git 依赖时命中了缓存的旧 commit（日志在 `~/.dsh/profiles/<profile>/.plugin-manager/logs/`，会报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，tarball 里的 hash 是历史 commit）。删掉 profile 的 `node_modules` **和 `pnpm-lock.yaml`**，再 `pnpm install` |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
