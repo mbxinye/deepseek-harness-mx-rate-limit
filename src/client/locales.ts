@@ -12,10 +12,8 @@ export type RateLimitLocaleKey =
   | 'newRoute' | 'addRoute' | 'newRouteInvalid'
   | 'removeRoute' | 'removeRouteConfirm'
   | 'routeEnabled'
-  | 'requestsPerWindow' | 'requestsPerWindowHint'
-  | 'windowMs' | 'windowMsHint'
-  | 'burstSize' | 'burstSizeHint'
-  | 'onExhausted' | 'onExhaustedHint' | 'onExhaustedWait' | 'onExhaustedReject'
+  | 'requestsPerWindow' | 'requestsPerWindowHint' | 'quotaSource'
+  | 'advanced'
   | 'maxQueueDepth' | 'maxQueueDepthHint'
   | 'maxWaitMs' | 'maxWaitMsHint'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
@@ -44,16 +42,10 @@ export const en: Record<RateLimitLocaleKey, string> = {
   removeRoute: 'Remove',
   removeRouteConfirm: 'Stop limiting this route? Its queue is dropped and its profile removed.',
   routeEnabled: 'Limit this route',
-  requestsPerWindow: 'Requests per window',
-  requestsPerWindowHint: 'Sustained rate. Prefilled at 30 per minute, which is NVIDIA NIM’s free tier.',
-  windowMs: 'Window (ms)',
-  windowMsHint: 'Length of the rolling window this rate applies over.',
-  burstSize: 'Burst size',
-  burstSizeHint: 'How many may arrive at once. Left blank it equals the request rate, so a burst is never wider than the quota.',
-  onExhausted: 'When exhausted',
-  onExhaustedHint: 'Wait for a token, or fail the request immediately.',
-  onExhaustedWait: 'Wait in line',
-  onExhaustedReject: 'Fail fast',
+  requestsPerWindow: 'Requests per minute (RPM)',
+  requestsPerWindowHint: 'The quota your provider documents for this route. Exceeding it is what earns you an HTTP 429, so this is the number to get right.',
+  quotaSource: 'Documented as {rpm} RPM · {source} · as of {asOf}',
+  advanced: 'Advanced',
   maxQueueDepth: 'Queue depth',
   maxQueueDepthHint: 'Requests allowed to wait at once. Beyond this, new arrivals fail instead of queueing without bound.',
   maxWaitMs: 'Longest wait (ms)',
@@ -91,16 +83,10 @@ export const zh: Record<RateLimitLocaleKey, string> = {
   removeRoute: '移除',
   removeRouteConfirm: '不再限制这个 route？它的队列会被丢弃，配置也会删除。',
   routeEnabled: '限制这个 route',
-  requestsPerWindow: '窗口内请求数',
-  requestsPerWindowHint: '稳态速率。默认预填每分钟 30 次 —— NVIDIA NIM 免费额度就是这么多。',
-  windowMs: '窗口长度（毫秒）',
-  windowMsHint: '这个速率所依据的滚动窗口长度。',
-  burstSize: '突发容量',
-  burstSizeHint: '允许多少请求同时到达。留空 = 等于请求数，所以突发不会超过额度本身。',
-  onExhausted: '额度用完时',
-  onExhaustedHint: '排队等一个令牌，还是立刻失败。',
-  onExhaustedWait: '排队等待',
-  onExhaustedReject: '立即失败',
+  requestsPerWindow: '每分钟请求数（RPM）',
+  requestsPerWindowHint: '这个 provider 文档里写的配额。超过它就会收到 HTTP 429 —— 这个数填错，正是本插件要防的事。',
+  quotaSource: '文档值 {rpm} RPM · {source} · {asOf}',
+  advanced: '高级',
   maxQueueDepth: '队列深度',
   maxQueueDepthHint: '允许同时等待的请求数。超过后新请求直接失败，不无限排队。',
   maxWaitMs: '最长等待（毫秒）',

@@ -12,9 +12,36 @@
  */
 import type { Volatile } from '@deepseek-ai/cosmokit';
 import z from '@deepseek-ai/schemastery';
-/** Sustained request rate used when a profile names none. Matches NIM's free tier. */
-export declare const DEFAULT_REQUESTS_PER_WINDOW = 30;
-/** Window length used when a profile names none. One minute is the common quota shape. */
+/**
+ * Sustained request rate used when a profile names none.
+ *
+ * Deliberately the LOWEST free-tier rate in `PROVIDER_QUOTAS` rather than a
+ * middle guess, because the two failure directions are not symmetric: a limit
+ * set too high is the 429 this plugin exists to prevent, while one set too low
+ * is merely slower. The page pre-fills the documented per-route rate instead, so
+ * this only applies to a route nobody configured — where slow is the right
+ * failure.
+ */
+export declare const DEFAULT_REQUESTS_PER_WINDOW = 10;
+/**
+ * Free-tier request quotas this plugin has evidence for, as documented limits
+ * rather than local tuning knobs.
+ *
+ * The page pre-fills from here, because the number is a property of the
+ * provider's offer, not a preference. Each entry records where the figure came
+ * from and when, since these move: Agnes halved its free text quota on
+ * 2026-06-22, which is exactly why a stale hardcoded number is dangerous and
+ * why the page shows the source rather than presenting the figure as fact.
+ */
+export declare const PROVIDER_QUOTAS: Readonly<Record<string, {
+    /** Documented requests per minute for a free key. */
+    readonly rpm: number;
+    /** Where the figure is documented, shown beside it. */
+    readonly source: string;
+    /** When that source last stated the figure. */
+    readonly asOf: string;
+}>>;
+/** Window length used when a profile names none. Every quota above is per minute. */
 export declare const DEFAULT_WINDOW_MS = 60000;
 /**
  * Queued requests tolerated per route before new arrivals are refused.
@@ -22,7 +49,9 @@ export declare const DEFAULT_WINDOW_MS = 60000;
  * Bounded because the harness's own concurrency limits bound the sources rather
  * than this queue: `maxActiveSubagents` (8) refuses rather than queues, and each
  * agent step issues model requests serially, so real depth stays in the tens.
- * At NIM's 30/min, 16 deep is ~32s worst case — noticeably slower, not hung.
+ * At a free tier's 10/min, 16 deep is ~96s worst case — noticeably slower, not
+ * hung. This is the one bound that gets worse as the rate falls, which is the
+ * argument for exposing it rather than fixing it.
  */
 export declare const DEFAULT_MAX_QUEUE_DEPTH = 16;
 /**

@@ -150,12 +150,9 @@ dsh plugin --profile desktop install
         purposeScope: conversation
         providers:
           nvidia:
-            requestsPerWindow: 30
-            windowMs: 60000
-            burstSize: 30
-            onExhausted: wait
-            maxQueueDepth: 16
-            maxWaitMs: 60000
+            requestsPerWindow: 40      # NIM 免费额度
+          agnes-ai:
+            requestsPerWindow: 10      # Agnes 免费额度的「实际」值，不是允许发起的 30
 ```
 
 ### 关键语义：`providers` 是白名单
@@ -177,19 +174,44 @@ dsh plugin --profile desktop install
 
 每个 route 的 profile：
 
-| 字段 | 默认 | 含义 |
-|---|---|---|
-| `enabled` | `true` | 单个 route 的开关 |
-| `requestsPerWindow` | `30` | 窗口内允许的请求数 |
-| `windowMs` | `60000` | 窗口长度（毫秒）|
-| `burstSize` | = `requestsPerWindow` | 突发容量，即桶的大小 |
-| `onExhausted` | `wait` | `wait` 排队；`reject` 立刻返回 `RATE_LIMIT` |
-| `maxQueueDepth` | `16` | 排队上限，超过直接拒绝 |
-| `maxWaitMs` | `60000` | 单次等待上限，超过直接拒绝 |
+页面上只问四个字段，因为只有这四个对得上 provider 实际文档的东西：
 
-**为什么要 `maxQueueDepth` / `maxWaitMs`**：无界排队会让队尾等很久。
-30/min 的桶排 16 个 = 最坏 32 秒；不设上限的话，并发一旦冲高就会挂到看起来像卡死。
-两个上限都触发时是**快速失败**，不是无限等。
+| 字段 | 默认 | 为什么需要 |
+|---|---|---|
+| `requestsPerWindow` | 见下表 | **唯一真正的 provider 事实**。所有 provider 都用「每分钟 N 次」表达配额 |
+| `enabled` | `true` | 暂停而不删除已填的数值 |
+| `maxQueueDepth` | `16` | 安全阀，见下 |
+| `maxWaitMs` | `60000` | 安全阀，见下 |
+
+`maxQueueDepth` / `maxWaitMs` 折在「高级」里 —— 它们**不是** provider 的配额，是我们为了让
+这个配额可执行而必须加的闸门。**速率越低它们越重要**：10/min 的桶排 16 个 = 最坏 96 秒。
+不设上限的话并发一冲高就会挂到看起来像卡死。两个上限都触发时是**快速失败**。
+
+### 已知免费额度（页面上会自动预填，并标注出处和日期）
+
+| route | 免费额度 | 出处 | 日期 |
+|---|---|---|---|
+| `nvidia` | **40** RPM | NVIDIA 开发者论坛实测（官方 API 文档未列出）| 2026-10 |
+| `agnes-ai` | **10** RPM | Agnes 官方文档：免费用户文本模型**实际**限额 | 2026-09-23 |
+
+Agnes 值得注意：它文档里「允许发起 RPM」是 30，但同一张表里「实际 RPM」是 **10** ——
+按 30 填照样会 429。页面上填的是**实际**值。
+
+配置里没写、也不在表内的 route，落到 `10`/分钟，而不是取中间值：**填高了就是 429，
+填低了只是慢一点**，两个方向的代价不对称。
+
+> ⚠️ 这些数字会变。Agnes 就在 2026-06-22 把免费文本额度**砍半**过。所以页面上会把
+> 出处和日期一起显示出来 —— 一个数字如果过期了，读起来应该是「那天文档是这么写的」，
+> 而不是「这是现在的真相」。
+
+### schema 里保留但页面不问的字段
+
+`windowMs`（默认 `60000`）和 `burstSize`（无默认，省略时等于 `requestsPerWindow`）
+仍然可写，但页面不问：
+
+- `windowMs` 保留是为了以后能表达「每天 N 次」这类配额，而不用再做一次破坏性改动。
+- 没有任何一个 provider 文档里写「突发容量」，所以页面不问；但留着这个字段，
+  万一某个 provider 的真实额度确实是突发型的，可以从 patch 里直接写。
 
 ### 为什么 `purposeScope` 默认是 `conversation`
 

@@ -17,6 +17,20 @@
 /** A value the host path-op wire type accepts. */
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
+/**
+ * Free-tier quotas the page pre-fills from, mirroring `PROVIDER_QUOTAS` in the
+ * Host config. Duplicated for the same reason `ROUTE_DEFAULTS` is, and checked
+ * the same way: `tests/preset.test.ts` fails if the two disagree.
+ *
+ * These are provider facts, not preferences, which is why they carry a source
+ * and a date. The page shows both, so a number that has since moved reads as
+ * "this is what was documented on that date" rather than as a current truth.
+ */
+export const PROVIDER_QUOTAS: Readonly<Record<string, { rpm: number; source: string; asOf: string }>> = {
+  nvidia: { rpm: 40, source: 'NVIDIA 开发者论坛实测（官方 API 文档未列出）', asOf: '2026-10' },
+  'agnes-ai': { rpm: 10, source: 'Agnes 官方文档：免费用户文本模型实际限额', asOf: '2026-09-23' },
+}
+
 /** Namespace of this plugin's Host entry. Spelled here: a client package must not import a Host package. */
 export const RATE_LIMIT_NS = 'llm-rate-limit'
 
@@ -150,7 +164,7 @@ export interface RateLimitCardFace extends CardActions {
  * drift, so the duplication is checked rather than merely noted.
  */
 export const ROUTE_DEFAULTS: Readonly<Record<string, number>> = {
-  requestsPerWindow: 30,
+  requestsPerWindow: 10,
   windowMs: 60_000,
   maxQueueDepth: 16,
   maxWaitMs: 60_000,
@@ -412,9 +426,25 @@ export class RateLimitController {
     return { text: staged.text, overridden: true, invalid: false }
   }
 
-  /** @returns the recommended value for one leaf, or undefined when it has none. */
+  /** @returns the recommended value for one leaf of one route, or undefined. */
   private recommended(path: readonly string[]): number | undefined {
-    return ROUTE_DEFAULTS[path[path.length - 1] ?? '']
+    const leaf = path[path.length - 1] ?? ''
+    // The rate is a property of the provider's offer, so a route we have a
+    // documented quota for gets that figure rather than a generic default.
+    if (leaf === 'requestsPerWindow') {
+      const quota = PROVIDER_QUOTAS[path[1] ?? '']
+      return quota?.rpm ?? ROUTE_DEFAULTS[leaf]
+    }
+    return ROUTE_DEFAULTS[leaf]
+  }
+
+  /**
+   * The documented quota for one route, when this page has evidence for it.
+   * @param route - provider route id.
+   * @returns the quota and where it came from, or undefined when unknown.
+   */
+  quota(route: string): { rpm: number; source: string; asOf: string } | undefined {
+    return PROVIDER_QUOTAS[route]
   }
 
   /**

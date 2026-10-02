@@ -20,6 +20,7 @@ import {
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 
 import { formLabels, type RateLimitLocaleKey } from './locales.ts'
+import { PROVIDER_QUOTAS } from './model.ts'
 import type { CardActions, CardState, FieldState, RateLimitCardFace } from './model.ts'
 
 /** Props the renderer binds for the rate limit page. */
@@ -28,8 +29,13 @@ export type RateLimitCardProps =
   & PropsLocale<'settings.rateLimit'>
   & InjectFace<RateLimitCardFace>
 
-/** Locale reader, narrowed to the keys this file uses. */
-type T = (key: RateLimitLocaleKey) => string
+/**
+ * Locale reader, narrowed to the keys this file uses.
+ *
+ * Keeps the optional interpolation bag because one string quotes a quota's
+ * source and date; without it the page could not say where a number came from.
+ */
+type T = (key: RateLimitLocaleKey, params?: Record<string, string>) => string
 
 /** One numeric or enum control, staged at its nested path. */
 function Field(props: {
@@ -96,6 +102,7 @@ function RouteRow(props: {
   const { route, state, disabled, actions, t } = props
   const at = (leaf: string): readonly string[] => ['providers', route, leaf]
   const editing = state.removing(route)
+  const quota = PROVIDER_QUOTAS[route]
   return (
     <fieldset disabled={disabled}>
       <legend>{route}</legend>
@@ -116,62 +123,40 @@ function RouteRow(props: {
         onReset={() => { actions.resetField(at('requestsPerWindow')) }}
         t={t}
       />
-      <Field
-        id={`mx-rl-${route}-window`}
-        label={t('windowMs')}
-        hint={t('windowMsHint')}
-        state={state.field(at('windowMs'))}
-        disabled={disabled}
-        numeric
-        onEdit={(text) => { actions.edit(at('windowMs'), text) }}
-        onReset={() => { actions.resetField(at('windowMs')) }}
-        t={t}
-      />
-      <Field
-        id={`mx-rl-${route}-burst`}
-        label={t('burstSize')}
-        hint={t('burstSizeHint')}
-        state={state.field(at('burstSize'))}
-        disabled={disabled}
-        numeric
-        onEdit={(text) => { actions.edit(at('burstSize'), text) }}
-        onReset={() => { actions.resetField(at('burstSize')) }}
-        t={t}
-      />
-      <Choice
-        id={`mx-rl-${route}-exhausted`}
-        label={t('onExhausted')}
-        hint={t('onExhaustedHint')}
-        value={state.field(at('onExhausted')).text || 'wait'}
-        disabled={disabled}
-        options={[
-          { value: 'wait', label: t('onExhaustedWait') },
-          { value: 'reject', label: t('onExhaustedReject') },
-        ]}
-        onChange={(next) => { actions.edit(at('onExhausted'), next) }}
-      />
-      <Field
-        id={`mx-rl-${route}-depth`}
-        label={t('maxQueueDepth')}
-        hint={t('maxQueueDepthHint')}
-        state={state.field(at('maxQueueDepth'))}
-        disabled={disabled}
-        numeric
-        onEdit={(text) => { actions.edit(at('maxQueueDepth'), text) }}
-        onReset={() => { actions.resetField(at('maxQueueDepth')) }}
-        t={t}
-      />
-      <Field
-        id={`mx-rl-${route}-wait`}
-        label={t('maxWaitMs')}
-        hint={t('maxWaitMsHint')}
-        state={state.field(at('maxWaitMs'))}
-        disabled={disabled}
-        numeric
-        onEdit={(text) => { actions.edit(at('maxWaitMs'), text) }}
-        onReset={() => { actions.resetField(at('maxWaitMs')) }}
-        t={t}
-      />
+      {quota === undefined ? null : (
+        <p role="note">{t('quotaSource', { rpm: String(quota.rpm), source: quota.source, asOf: quota.asOf })}</p>
+      )}
+      {/*
+        A native disclosure rather than the shared DisclosureRow: that one is a
+        controlled process row needing an icon this package cannot import, and a
+        settings sub-section needs none of its affordances. <details> is focusable,
+        keyboard-operable and announced as expanded/collapsed without any of that.
+      */}
+      <details>
+        <summary>{t('advanced')}</summary>
+        <Field
+          id={`mx-rl-${route}-depth`}
+          label={t('maxQueueDepth')}
+          hint={t('maxQueueDepthHint')}
+          state={state.field(at('maxQueueDepth'))}
+          disabled={disabled}
+          numeric
+          onEdit={(text) => { actions.edit(at('maxQueueDepth'), text) }}
+          onReset={() => { actions.resetField(at('maxQueueDepth')) }}
+          t={t}
+        />
+        <Field
+          id={`mx-rl-${route}-wait`}
+          label={t('maxWaitMs')}
+          hint={t('maxWaitMsHint')}
+          state={state.field(at('maxWaitMs'))}
+          disabled={disabled}
+          numeric
+          onEdit={(text) => { actions.edit(at('maxWaitMs'), text) }}
+          onReset={() => { actions.resetField(at('maxWaitMs')) }}
+          t={t}
+        />
+      </details>
       <Button variant="ghost" disabled={disabled} onClick={() => { actions.removeRoute(route) }}>
         {editing ? t('overridden') : t('removeRoute')}
       </Button>
