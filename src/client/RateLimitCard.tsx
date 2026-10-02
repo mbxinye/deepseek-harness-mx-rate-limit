@@ -126,37 +126,6 @@ function RouteRow(props: {
       {quota === undefined ? null : (
         <p role="note">{t('quotaSource', { rpm: String(quota.rpm), source: quota.source, asOf: quota.asOf })}</p>
       )}
-      {/*
-        A native disclosure rather than the shared DisclosureRow: that one is a
-        controlled process row needing an icon this package cannot import, and a
-        settings sub-section needs none of its affordances. <details> is focusable,
-        keyboard-operable and announced as expanded/collapsed without any of that.
-      */}
-      <details>
-        <summary>{t('advanced')}</summary>
-        <Field
-          id={`mx-rl-${route}-depth`}
-          label={t('maxQueueDepth')}
-          hint={t('maxQueueDepthHint')}
-          state={state.field(at('maxQueueDepth'))}
-          disabled={disabled}
-          numeric
-          onEdit={(text) => { actions.edit(at('maxQueueDepth'), text) }}
-          onReset={() => { actions.resetField(at('maxQueueDepth')) }}
-          t={t}
-        />
-        <Field
-          id={`mx-rl-${route}-wait`}
-          label={t('maxWaitMs')}
-          hint={t('maxWaitMsHint')}
-          state={state.field(at('maxWaitMs'))}
-          disabled={disabled}
-          numeric
-          onEdit={(text) => { actions.edit(at('maxWaitMs'), text) }}
-          onReset={() => { actions.resetField(at('maxWaitMs')) }}
-          t={t}
-        />
-      </details>
       <Button variant="ghost" disabled={disabled} onClick={() => { actions.removeRoute(route) }}>
         {editing ? t('overridden') : t('removeRoute')}
       </Button>

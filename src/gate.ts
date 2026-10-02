@@ -3,7 +3,7 @@
  *
  * The queue exists because a bucket alone is not enough. If every waiter polled
  * it independently, N requests arriving together would each compute nearly the
- * same remaining delay and be released in the same instant â€” a burst that is
+ * same remaining delay and be released in the same instant â€?a burst that is
  * exactly what the limiter is meant to prevent. Granting tokens in arrival
  * order instead holds the release rate at exactly `requestsPerWindow /
  * windowMs`, so a saturated route hands out one request per interval no matter
@@ -32,21 +32,9 @@ export interface GateScheduler {
   schedule(fn: () => void, ms: number): () => void
 }
 
-/** Why a request was refused a token without waiting. */
-export type RefusalReason =
-  /** The profile is configured to fail fast rather than queue. */
-  | 'on-exhausted'
-  /** The queue already holds `maxQueueDepth` requests. */
-  | 'queue-full'
-  /** Waiting out the budget would exceed `maxWaitMs`. */
-  | 'wait-timeout'
-  /** The gate was disposed, which happens when the plugin unloads. */
-  | 'disposed'
-
 /** The result of asking a gate for a token. */
 export type AcquireOutcome =
   | { readonly kind: 'granted'; readonly waitedMs: number }
-  | { readonly kind: 'refused'; readonly reason: RefusalReason }
   | { readonly kind: 'aborted' }
 
 /** One queued request awaiting a token. */
@@ -87,7 +75,6 @@ export function defaultScheduler(): GateScheduler {
 export class Gate {
   /** The route this gate limits; a bucket and a queue serve exactly one route. */
   readonly route: string
-  private readonly limit: ResolvedProviderLimit
   private readonly scheduler: GateScheduler
   private readonly bucket: TokenBucket
   private readonly queue: Waiter[] = []
@@ -99,12 +86,11 @@ export class Gate {
   private disposed = false
 
   /**
-   * @param limit - resolved profile owning the rate, burst, and bounds.
+   * @param limit - resolved profile owning the rate and burst.
    * @param scheduler - clock and timer; defaults to the monotonic real one.
    */
   constructor(limit: ResolvedProviderLimit, scheduler: GateScheduler = defaultScheduler()) {
     this.route = limit.route
-    this.limit = limit
     this.scheduler = scheduler
     this.bucket = new TokenBucket(
       { capacity: limit.burstSize, refillPerMs: limit.requestsPerWindow / limit.windowMs },
@@ -122,7 +108,10 @@ export class Gate {
    * @returns how the request was settled.
    */
   acquire(signal?: AbortSignal): Promise<AcquireOutcome> {
-    if (this.disposed) return Promise.resolve({ kind: 'refused', reason: 'disposed' })
+    // A disposed gate settles as aborted, the same as disposal draining the queue:
+    // unloading is not a rate limit, and reporting it as one would put a
+    // pointless RATE_LIMIT in front of dsh-llm-retry for a plugin that is gone.
+    if (this.disposed) return Promise.resolve({ kind: 'aborted' })
     if (signal?.aborted === true) return Promise.resolve({ kind: 'aborted' })
 
     const now = this.scheduler.now()
@@ -130,18 +119,12 @@ export class Gate {
       return Promise.resolve({ kind: 'granted', waitedMs: 0 })
     }
 
-    // Every refusal below happens before anything is queued, so a refused
-    // request leaves no trace on the queue or the bucket.
-    if (this.limit.onExhausted === 'reject') {
-      return Promise.resolve({ kind: 'refused', reason: 'on-exhausted' })
-    }
-    if (this.limit.maxWaitMs === 0 || this.queue.length >= this.limit.maxQueueDepth) {
-      return Promise.resolve({
-        kind: 'refused',
-        reason: this.limit.maxWaitMs === 0 ? 'wait-timeout' : 'queue-full',
-      })
-    }
-
+    // Everything past this point waits. There is deliberately no bound on the
+    // wait and no "reject when full" branch: `dsh-llm-retry` treats RATE_LIMIT as
+    // retryable by default, up to five times, so shedding load here would feed
+    // it -- every refusal becomes another request competing for the same quota.
+    // A token bucket at requestsPerWindow > 0 issues a token within one window,
+    // so waiting is slower but never hung.
     return new Promise<AcquireOutcome>((resolve) => {
       const waiter: Waiter = { enqueuedAt: now, resolve, signal, onAbort: undefined }
       if (signal !== undefined) {
@@ -178,20 +161,15 @@ export class Gate {
   /**
    * Grant tokens to as many queued requests as the bucket allows, in order.
    *
-   * Refuses any head that has spent its whole wait budget first, so a request
-   * that cannot be served in time fails instead of holding the line behind it.
+   * No head is ever dropped for having waited too long. The bucket decides who
+   * runs; a policy about how long is willing to wait would have to express itself
+   * as a refusal, and a refusal is what this gate stopped producing.
    */
   private drain(): void {
     for (;;) {
       const head = this.queue[0]
       if (head === undefined) return
       const now = this.scheduler.now()
-
-      if (now - head.enqueuedAt >= this.limit.maxWaitMs) {
-        this.queue.shift()
-        this.settle(head, { kind: 'refused', reason: 'wait-timeout' })
-        continue
-      }
       if (!this.bucket.tryAcquire(now)) return
       this.queue.shift()
       this.settle(head, { kind: 'granted', waitedMs: now - head.enqueuedAt })
@@ -265,7 +243,7 @@ export class Gate {
     this.cancelPending?.()
     this.cancelPending = undefined
     for (const waiter of this.queue.splice(0)) {
-      this.settle(waiter, { kind: 'refused', reason: 'disposed' })
+      this.settle(waiter, { kind: 'aborted' })
     }
   }
 }

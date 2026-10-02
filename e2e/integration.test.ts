@@ -201,22 +201,6 @@ describe('llm/stream integration through the real LlmRuntime', () => {
     } finally { stack.dispose() }
   })
 
-  test('a refusal is one terminal error chunk carrying RATE_LIMIT', async () => {
-    const stack = await mount({
-      providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000, maxQueueDepth: 0 } },
-    })
-    try {
-      await drain(stack.ctx, 'a')
-      const refused = await drain(stack.ctx, 'b')
-      assert.equal(refused.terminal, 'error', 'a refusal settles, it does not throw')
-      assert.equal(refused.code, 'RATE_LIMIT', 'the code dsh-llm-retry already retries')
-      assert.ok(
-        typeof refused.providerRetryAfterMs === 'number' && refused.providerRetryAfterMs > 0,
-        'providerRetryAfterMs is the seam to dsh-llm-retry',
-      )
-    } finally { stack.dispose() }
-  })
-
   test('a route outside the whitelist is never limited', async () => {
     const stack = await mount({ providers: { elsewhere: { requestsPerWindow: 1, windowMs: 60_000 } } })
     try {
@@ -245,12 +229,20 @@ describe('llm/stream integration through the real LlmRuntime', () => {
     const scheduler = new ManualScheduler()
     const stack = await mount({
       purposeScope: 'all',
-      providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000, maxQueueDepth: 0 } },
+      providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000 } },
     }, scheduler)
     try {
       await drain(stack.ctx, 'warm')
-      const refused = await drain(stack.ctx, 'summary', 'compaction')
-      assert.equal(refused.code, 'RATE_LIMIT', 'under "all" the auxiliary call is counted too')
+      // "Counted" now means "waits", since nothing is refused any more. An
+      // uncounted auxiliary call would sail through on the empty bucket, exactly
+      // as the conversation-scope test above shows.
+      const aux = drain(stack.ctx, 'summary', 'compaction')
+      await scheduler.settle()
+      assert.equal(stack.adapter.admitted.length, 1, 'the auxiliary call is queued behind the budget')
+
+      scheduler.advance(2000)
+      assert.equal((await aux).terminal, 'stop')
+      assert.equal(stack.adapter.admitted.length, 2)
     } finally { stack.dispose() }
   })
 
@@ -258,7 +250,7 @@ describe('llm/stream integration through the real LlmRuntime', () => {
     const scheduler = new ManualScheduler()
     const stack = await mount({
       enabled: false,
-      providers: { probe: { burstSize: 1, requestsPerWindow: 1, windowMs: 60_000, maxQueueDepth: 0 } },
+      providers: { probe: { burstSize: 1, requestsPerWindow: 1, windowMs: 60_000 } },
     }, scheduler)
     try {
       for (let i = 0; i < 3; i++) assert.equal((await drain(stack.ctx, `m${i}`)).terminal, 'stop')
@@ -290,12 +282,19 @@ describe('llm/stream integration through the real LlmRuntime', () => {
     // whose isolate labels could differ from the llm service's.
     const scheduler = new ManualScheduler()
     const stack = await mount({
-      providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000, maxQueueDepth: 0 } },
+      providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000 } },
     }, scheduler, { childScope: true })
     try {
       await drain(stack.ctx, 'a')
-      const refused = await drain(stack.ctx, 'b')
-      assert.equal(refused.code, 'RATE_LIMIT', 'the listener was not silently filtered out')
+      // The observable for "the gate engaged" is a wait, now that nothing is
+      // refused: had the listener been silently filtered out, `b` would sail
+      // through on the empty bucket.
+      const b = drain(stack.ctx, 'b')
+      await scheduler.settle()
+      assert.equal(stack.adapter.admitted.length, 1, 'the listener was not silently filtered out')
+
+      scheduler.advance(2000)
+      assert.equal((await b).terminal, 'stop')
     } finally { stack.dispose() }
   })
 })
@@ -306,7 +305,7 @@ describe('the production scheduler path', () => {
     // `defaultScheduler()` — `performance.now()` plus `setTimeout` — which is
     // what actually runs in the desktop app.
     const stack = await mount({
-      providers: { probe: { burstSize: 1, requestsPerWindow: 100, windowMs: 1000, maxQueueDepth: 8 } },
+      providers: { probe: { burstSize: 1, requestsPerWindow: 100, windowMs: 1000 } },
     })
     try {
       await drain(stack.ctx, 'warm')

@@ -58,27 +58,20 @@ export const PROVIDER_QUOTAS: Readonly<Record<string, {
 export const DEFAULT_WINDOW_MS = 60_000
 
 /**
- * Queued requests tolerated per route before new arrivals are refused.
+ * What one provider's profile accepts.
  *
- * Bounded because the harness's own concurrency limits bound the sources rather
- * than this queue: `maxActiveSubagents` (8) refuses rather than queues, and each
- * agent step issues model requests serially, so real depth stays in the tens.
- * At a free tier's 10/min, 16 deep is ~96s worst case — noticeably slower, not
- * hung. This is the one bound that gets worse as the rate falls, which is the
- * argument for exposing it rather than fixing it.
- */
-export const DEFAULT_MAX_QUEUE_DEPTH = 16
-
-/**
- * Longest a single request may wait for a token.
+ * Two fields. Everything else this plugin once offered was a bound on how long a
+ * request would wait, and every one of them produced a `RATE_LIMIT` failure —
+ * which `dsh-llm-retry` treats as retryable by default
+ * (`DEFAULT_RETRYABLE_CODES` in `packages/llm/llm/src/retry-policy.ts`), up to
+ * five times with backoff. So a queue bound did not shed load, it fed it: each
+ * refusal became another request competing for the same quota. Waiting is
+ * strictly better, and it is safe — a token bucket at `requestsPerWindow > 0`
+ * guarantees a token within one window, so an unbounded wait is still finite.
  *
- * Aligned with the default window: waiting a full window always earns a token,
- * so a longer wait means concurrency far exceeded expectation and failing beats
- * hanging. Zero disables waiting entirely, making every exhausted route refuse.
+ * `windowMs` and `burstSize` stay writable for cases no free tier documents: a
+ * daily quota needs the former, a genuinely bursty quota the latter.
  */
-export const DEFAULT_MAX_WAIT_MS = 60_000
-
-/** What one provider's profile accepts. */
 export interface ProviderRateLimit {
   /** Limit this route without deleting the rest of its profile. */
   enabled?: boolean
@@ -92,12 +85,6 @@ export interface ProviderRateLimit {
    * the shape NIM's "30 per minute" actually means.
    */
   burstSize?: number
-  /** Wait for a token when the bucket is empty, or refuse the request. */
-  onExhausted?: 'wait' | 'reject'
-  /** Queued requests tolerated before refusing outright. */
-  maxQueueDepth?: number
-  /** Longest single wait for a token; 0 makes an exhausted route refuse. */
-  maxWaitMs?: number
 }
 
 /** Which model-request classes draw on the same budget. */
@@ -158,9 +145,6 @@ export interface ResolvedProviderLimit {
   readonly requestsPerWindow: number
   readonly windowMs: number
   readonly burstSize: number
-  readonly onExhausted: 'wait' | 'reject'
-  readonly maxQueueDepth: number
-  readonly maxWaitMs: number
 }
 
 const providerProfile = z.object({
@@ -168,9 +152,6 @@ const providerProfile = z.object({
   requestsPerWindow: z.number().step(1).min(1).max(100_000).default(DEFAULT_REQUESTS_PER_WINDOW),
   windowMs: z.number().step(1).min(100).max(MAX_TIMER_DELAY_MS).default(DEFAULT_WINDOW_MS),
   burstSize: z.number().step(1).min(1).max(100_000),
-  onExhausted: z.union(['wait', 'reject']).default('wait'),
-  maxQueueDepth: z.number().step(1).min(0).default(DEFAULT_MAX_QUEUE_DEPTH),
-  maxWaitMs: z.number().step(1).min(0).max(MAX_TIMER_DELAY_MS).default(DEFAULT_MAX_WAIT_MS),
 })
 
 /**
@@ -213,9 +194,6 @@ export function resolveProviderLimit(
     // The whole quota as one burst: "30 per minute" means an average of 30 with
     // tolerance for a short spike, not a ban on any spike.
     burstSize: resolved.burstSize ?? requestsPerWindow,
-    onExhausted: resolved.onExhausted ?? 'wait',
-    maxQueueDepth: resolved.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH,
-    maxWaitMs: resolved.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
   })
 }
 

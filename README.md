@@ -174,18 +174,30 @@ dsh plugin --profile desktop install
 
 每个 route 的 profile：
 
-页面上只问四个字段，因为只有这四个对得上 provider 实际文档的东西：
+页面上只问两个字段，因为只有这两个对得上 provider 实际文档的东西：
 
 | 字段 | 默认 | 为什么需要 |
 |---|---|---|
 | `requestsPerWindow` | 见下表 | **唯一真正的 provider 事实**。所有 provider 都用「每分钟 N 次」表达配额 |
 | `enabled` | `true` | 暂停而不删除已填的数值 |
-| `maxQueueDepth` | `16` | 安全阀，见下 |
-| `maxWaitMs` | `60000` | 安全阀，见下 |
 
-`maxQueueDepth` / `maxWaitMs` 折在「高级」里 —— 它们**不是** provider 的配额，是我们为了让
-这个配额可执行而必须加的闸门。**速率越低它们越重要**：10/min 的桶排 16 个 = 最坏 96 秒。
-不设上限的话并发一冲高就会挂到看起来像卡死。两个上限都触发时是**快速失败**。
+### 为什么没有「队列深度」和「最长等待」
+
+有过，而且它们造成的伤害比解决的问题大。
+
+限额用尽时只有两种做法：**排队**，或者**返回 `RATE_LIMIT` 拒绝**。而
+`dsh-llm-retry` 的默认可重试错误码里就包含 `RATE_LIMIT`
+（`packages/llm/llm/src/retry-policy.ts`），默认最多重试 **5** 次、带指数退避。
+
+所以拒绝不是「卸载负载」，是**给同一个额度再加一个请求**：被拒的请求会重试，
+重试又回到同一个队列里。这是正反馈 —— 越忙越拒，越拒越忙。
+
+排队则不会有这个问题，而且**队列不可能真的无限长**：请求的来源本身有上限
+（`maxParallelToolCalls` 10、`maxActiveSubagents` 8、`maxDepth` 1），
+所以最多也就几十个在等。令牌桶还保证 `requestsPerWindow > 0` 时**每个窗口必出一个令牌**，
+所以「一直等」是慢，不是会挂死。
+
+这就是现在只有两个字段的原因。
 
 ### 已知免费额度（页面上会自动预填，并标注出处和日期）
 
@@ -239,13 +251,12 @@ harness 里除了主对话，还有两类辅助模型请求：`compaction`（上
 
 | 场景 | 谁处理 |
 |---|---|
-| 本地突发超配额（本插件知道）| 本插件排队，`RATE_LIMIT` 根本不产生 |
+| 本地突发超配额（本插件知道）| 本插件排队 —— 它知道得比 provider 早，所以永远不会有本地 429 |
 | 共享 API key 被别的客户端占用 | provider 回 429 → `llm-retry` 重试 |
 | provider 抖动 / 5xx | `llm-retry` |
 
-本插件拒绝请求时发出的终局 chunk 带 `providerRetryAfterMs`，正是 `llm-retry`
-用来替代本地退避的字段。`RATE_LIMIT` 本来就在 `llm-retry` 的默认可重试集里，所以
-**不需要改任何 provider 配置**。
+本插件**不产生** `RATE_LIMIT`。只有 provider 真的回 429 时才会出现，那时
+`llm-retry` 去处理才是对的 —— 因为那个额度确实是被别人占掉的，本插件没有看见。
 
 ---
 
@@ -288,14 +299,12 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
-| `llm-rate-limit: refused, ...` | 队列满或等待超时。两个上限生效了，调大 `maxQueueDepth` / `maxWaitMs` |
 
 ---
 
 ## 已知限制
 
 - **进程内限流**。多开几个桌面端 = 几份配额。跨进程需要共享存储，不在当前范围内。
-- **`maxWaitMs` 与 `windowMs` 默认同为 60s**，因为等满一个窗口必然拿到令牌。
   等更久说明并发远超预期，此时失败比继续挂更合理。
 - **不覆盖 `agents` / `workflow` 之外的来源**。实际上所有模型调用都过 `llm/stream`，
   所以是全覆盖的；这一条是说 subagent 的并发是**拒绝**语义

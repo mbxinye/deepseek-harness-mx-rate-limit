@@ -3,8 +3,6 @@ import { describe, test } from 'node:test'
 
 import {
   Config,
-  DEFAULT_MAX_QUEUE_DEPTH,
-  DEFAULT_MAX_WAIT_MS,
   DEFAULT_REQUESTS_PER_WINDOW,
   DEFAULT_WINDOW_MS,
   limitForRoute,
@@ -22,14 +20,20 @@ describe('Config schema defaults', () => {
     assert.equal(parsed.enabled, true)
   })
 
-  test('a route named with no fields adopts the NIM free-tier defaults', () => {
+  test('a route named with no fields adopts the documented free-tier rate', () => {
     const nim = plainConfig(Config({ providers: { nim: {} } })).providers.nim
     assert.ok(nim)
     assert.equal(nim.requestsPerWindow, DEFAULT_REQUESTS_PER_WINDOW)
     assert.equal(nim.windowMs, DEFAULT_WINDOW_MS)
-    assert.equal(nim.onExhausted, 'wait')
-    assert.equal(nim.maxQueueDepth, DEFAULT_MAX_QUEUE_DEPTH)
-    assert.equal(nim.maxWaitMs, DEFAULT_MAX_WAIT_MS)
+  })
+
+  test('no field can express a wait bound, so nothing can shed load', () => {
+    // The profile is two numbers wide. A queue depth, a wait budget or a
+    // fail-fast switch would all have to surface as a RATE_LIMIT refusal, and
+    // dsh-llm-retry retries that by default -- so each one would manufacture
+    // another request for the same quota instead of relieving it.
+    const nim = plainConfig(Config({ providers: { nim: {} } })).providers.nim
+    assert.deepEqual(Object.keys(nim ?? {}).sort(), ['enabled', 'requestsPerWindow', 'windowMs'])
   })
 
   test('volatile fields are live references, so plainConfig is what callers read', () => {
@@ -41,9 +45,6 @@ describe('Config schema defaults', () => {
       enabled: true,
       requestsPerWindow: DEFAULT_REQUESTS_PER_WINDOW,
       windowMs: DEFAULT_WINDOW_MS,
-      onExhausted: 'wait',
-      maxQueueDepth: DEFAULT_MAX_QUEUE_DEPTH,
-      maxWaitMs: DEFAULT_MAX_WAIT_MS,
     })
   })
 
@@ -76,12 +77,8 @@ describe('Config schema rejections', () => {
     assert.throws(() => Config({ providers: { nim: { windowMs: 99 } } }))
   })
 
-  test('refuses a delay no timer can hold', () => {
-    assert.throws(() => Config({ providers: { nim: { maxWaitMs: 2_147_483_648 } } }))
-  })
-
-  test('refuses a negative queue depth', () => {
-    assert.throws(() => Config({ providers: { nim: { maxQueueDepth: -1 } } }))
+  test('refuses a window no timer can hold', () => {
+    assert.throws(() => Config({ providers: { nim: { windowMs: 2_147_483_648 } } }))
   })
 })
 

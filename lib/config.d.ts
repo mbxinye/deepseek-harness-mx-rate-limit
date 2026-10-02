@@ -44,25 +44,20 @@ export declare const PROVIDER_QUOTAS: Readonly<Record<string, {
 /** Window length used when a profile names none. Every quota above is per minute. */
 export declare const DEFAULT_WINDOW_MS = 60000;
 /**
- * Queued requests tolerated per route before new arrivals are refused.
+ * What one provider's profile accepts.
  *
- * Bounded because the harness's own concurrency limits bound the sources rather
- * than this queue: `maxActiveSubagents` (8) refuses rather than queues, and each
- * agent step issues model requests serially, so real depth stays in the tens.
- * At a free tier's 10/min, 16 deep is ~96s worst case — noticeably slower, not
- * hung. This is the one bound that gets worse as the rate falls, which is the
- * argument for exposing it rather than fixing it.
- */
-export declare const DEFAULT_MAX_QUEUE_DEPTH = 16;
-/**
- * Longest a single request may wait for a token.
+ * Two fields. Everything else this plugin once offered was a bound on how long a
+ * request would wait, and every one of them produced a `RATE_LIMIT` failure —
+ * which `dsh-llm-retry` treats as retryable by default
+ * (`DEFAULT_RETRYABLE_CODES` in `packages/llm/llm/src/retry-policy.ts`), up to
+ * five times with backoff. So a queue bound did not shed load, it fed it: each
+ * refusal became another request competing for the same quota. Waiting is
+ * strictly better, and it is safe — a token bucket at `requestsPerWindow > 0`
+ * guarantees a token within one window, so an unbounded wait is still finite.
  *
- * Aligned with the default window: waiting a full window always earns a token,
- * so a longer wait means concurrency far exceeded expectation and failing beats
- * hanging. Zero disables waiting entirely, making every exhausted route refuse.
+ * `windowMs` and `burstSize` stay writable for cases no free tier documents: a
+ * daily quota needs the former, a genuinely bursty quota the latter.
  */
-export declare const DEFAULT_MAX_WAIT_MS = 60000;
-/** What one provider's profile accepts. */
 export interface ProviderRateLimit {
     /** Limit this route without deleting the rest of its profile. */
     enabled?: boolean;
@@ -76,12 +71,6 @@ export interface ProviderRateLimit {
      * the shape NIM's "30 per minute" actually means.
      */
     burstSize?: number;
-    /** Wait for a token when the bucket is empty, or refuse the request. */
-    onExhausted?: 'wait' | 'reject';
-    /** Queued requests tolerated before refusing outright. */
-    maxQueueDepth?: number;
-    /** Longest single wait for a token; 0 makes an exhausted route refuse. */
-    maxWaitMs?: number;
 }
 /** Which model-request classes draw on the same budget. */
 export type PurposeScope = 
@@ -130,9 +119,6 @@ export interface ResolvedProviderLimit {
     readonly requestsPerWindow: number;
     readonly windowMs: number;
     readonly burstSize: number;
-    readonly onExhausted: 'wait' | 'reject';
-    readonly maxQueueDepth: number;
-    readonly maxWaitMs: number;
 }
 /**
  * Runtime schema for {@link Config}.

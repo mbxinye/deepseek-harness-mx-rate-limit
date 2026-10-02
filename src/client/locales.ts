@@ -13,9 +13,6 @@ export type RateLimitLocaleKey =
   | 'removeRoute' | 'removeRouteConfirm'
   | 'routeEnabled'
   | 'requestsPerWindow' | 'requestsPerWindowHint' | 'quotaSource'
-  | 'advanced'
-  | 'maxQueueDepth' | 'maxQueueDepthHint'
-  | 'maxWaitMs' | 'maxWaitMsHint'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed' | 'invalidNumber'
 
@@ -45,11 +42,6 @@ export const en: Record<RateLimitLocaleKey, string> = {
   requestsPerWindow: 'Requests per minute (RPM)',
   requestsPerWindowHint: 'The quota your provider documents for this route. Exceeding it is what earns you an HTTP 429, so this is the number to get right.',
   quotaSource: 'Documented as {rpm} RPM · {source} · as of {asOf}',
-  advanced: 'Advanced',
-  maxQueueDepth: 'Queue depth',
-  maxQueueDepthHint: 'Requests allowed to wait at once. Beyond this, new arrivals fail instead of queueing without bound.',
-  maxWaitMs: 'Longest wait (ms)',
-  maxWaitMsHint: 'Cap on one request’s wait. Beyond this it fails rather than hanging.',
   overridden: 'Overridden',
   reset: 'Reset to default',
   readOnly: 'This deployment stores settings read-only.',
@@ -86,11 +78,6 @@ export const zh: Record<RateLimitLocaleKey, string> = {
   requestsPerWindow: '每分钟请求数（RPM）',
   requestsPerWindowHint: '这个 provider 文档里写的配额。超过它就会收到 HTTP 429 —— 这个数填错，正是本插件要防的事。',
   quotaSource: '文档值 {rpm} RPM · {source} · {asOf}',
-  advanced: '高级',
-  maxQueueDepth: '队列深度',
-  maxQueueDepthHint: '允许同时等待的请求数。超过后新请求直接失败，不无限排队。',
-  maxWaitMs: '最长等待（毫秒）',
-  maxWaitMsHint: '单个请求的等待上限。超过后失败而不是一直挂着。',
   overridden: '已覆盖',
   reset: '恢复默认',
   readOnly: '本部署的设置为只读。',

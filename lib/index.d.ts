@@ -18,10 +18,10 @@ import type { Context } from '@deepseek-ai/cordis';
 import { Config } from './config.ts';
 import type { GateScheduler, GateSnapshot } from './gate.ts';
 export type { Options, PlainConfig, ProviderRateLimit, PurposeScope, ResolvedProviderLimit, } from './config.ts';
-export { Config, DEFAULT_MAX_QUEUE_DEPTH, DEFAULT_MAX_WAIT_MS, DEFAULT_REQUESTS_PER_WINDOW, DEFAULT_WINDOW_MS, limitForRoute, plainConfig, resolveProviderLimit, } from './config.ts';
+export { Config, DEFAULT_REQUESTS_PER_WINDOW, DEFAULT_WINDOW_MS, limitForRoute, plainConfig, resolveProviderLimit, } from './config.ts';
 export { TokenBucket, MAX_TIMER_DELAY_MS } from './bucket.ts';
 export { Gate, defaultScheduler } from './gate.ts';
-export type { AcquireOutcome, GateScheduler, GateSnapshot, RefusalReason } from './gate.ts';
+export type { AcquireOutcome, GateScheduler, GateSnapshot } from './gate.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         /** The mounted rate limiter, readable so a UI can show queue depth. */

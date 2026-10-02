@@ -166,8 +166,6 @@ export interface RateLimitCardFace extends CardActions {
 export const ROUTE_DEFAULTS: Readonly<Record<string, number>> = {
   requestsPerWindow: 10,
   windowMs: 60_000,
-  maxQueueDepth: 16,
-  maxWaitMs: 60_000,
 }
 
 /**
@@ -421,7 +419,15 @@ export class RateLimitController {
       }
     }
     if (staged.clear) {
-      return { text: formatScalar(readPath(snapshot.base, path)), overridden: false, invalid: false }
+      return {
+        // What the Host will hold once the unset lands: the composition layer,
+        // or the recommended value when nothing upstream carries one. Falling
+        // back to blank here would be a lie -- the field is about to have a
+        // value, and showing nothing reads as "no limit".
+        text: formatScalar(readPath(snapshot.base, path) ?? this.recommended(path)),
+        overridden: false,
+        invalid: false,
+      }
     }
     return { text: staged.text, overridden: true, invalid: false }
   }

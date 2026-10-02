@@ -207,6 +207,39 @@ describe('RateLimitController staging', () => {
     card.dispose()
   })
 
+  test('resetting a field shows what the Host will fall back to, never blank', () => {
+    // Regression: reset staged a clear and the control rendered the composition
+    // layer alone. With nothing upstream carrying the field that is undefined,
+    // so the field went empty -- reading as "no limit" for a route that is about
+    // to hold one. It must show the value the unset actually leaves behind.
+    const scope = new FakeScope({ providers: { nvidia: { requestsPerWindow: 30 } } })
+    const card = new RateLimitController(scope)
+    card.actions().resetField(['providers', 'nvidia', 'requestsPerWindow'])
+    assert.notEqual(card.field(['providers', 'nvidia', 'requestsPerWindow']).text, '')
+    card.dispose()
+  })
+
+  test('reset prefers the composition layer over the recommendation', () => {
+    // A bundle that pins a rate owns the fallback; the recommendation is only for
+    // a field nothing upstream carries, and must not paper over a real default.
+    const scope = new FakeScope(
+      { providers: { nvidia: { requestsPerWindow: 30 } } },
+      { base: { providers: { nvidia: { requestsPerWindow: 40 } } } },
+    )
+    const card = new RateLimitController(scope)
+    card.actions().resetField(['providers', 'nvidia', 'requestsPerWindow'])
+    assert.equal(card.field(['providers', 'nvidia', 'requestsPerWindow']).text, '40')
+    card.dispose()
+  })
+
+  test('reset falls back to the documented quota when no layer carries the field', () => {
+    const scope = new FakeScope({ providers: { 'agnes-ai': {} } })
+    const card = new RateLimitController(scope)
+    card.actions().resetField(['providers', 'agnes-ai', 'requestsPerWindow'])
+    assert.equal(card.field(['providers', 'agnes-ai', 'requestsPerWindow']).text, '10')
+    card.dispose()
+  })
+
   test('resetting a field the user layer never carried writes nothing', async () => {
     const scope = new FakeScope({ providers: { nvidia: {} } })
     const card = new RateLimitController(scope)

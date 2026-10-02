@@ -85,7 +85,7 @@ describe('mounting through ctx.plugin', () => {
     // Exactly the shape cordis.patch.yml ships, resolved to plain values.
     const fiber = await ctx.plugin(RateLimiter, {
       purposeScope: 'conversation',
-      providers: { probe: { requestsPerWindow: 30, windowMs: 60_000, burstSize: 1, maxQueueDepth: 4, maxWaitMs: 5_000 } },
+      providers: { probe: { requestsPerWindow: 30, windowMs: 60_000, burstSize: 1 } },
     })
 
     assert.equal(fiber.state, ACTIVE)

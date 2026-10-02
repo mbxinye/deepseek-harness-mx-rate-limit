@@ -35,24 +35,37 @@ describe('Gate immediate admission', () => {
     assert.deepEqual(await queued, { kind: 'granted', waitedMs: 2000 })
   })
 
-  test('onExhausted reject fails fast without queueing', async () => {
+  test('an exhausted request always queues; there is no fail-fast profile', async () => {
+    // The two refusal paths this replaced could only surface as RATE_LIMIT, which
+    // dsh-llm-retry retries by default. Shedding load here fed the quota it was
+    // meant to protect, so a burst now simply waits -- and a token bucket at this
+    // rate guarantees one within a window, so the wait is finite.
     const scheduler = new ManualScheduler()
-    const gate = new Gate(nim({ burstSize: 1, onExhausted: 'reject' }), scheduler)
+    const gate = new Gate(nim({ burstSize: 1 }), scheduler)
 
     assert.deepEqual(await gate.acquire(), { kind: 'granted', waitedMs: 0 })
-    assert.deepEqual(
-      await gate.acquire(),
-      { kind: 'refused', reason: 'on-exhausted' },
-    )
-    assert.equal(gate.snapshot().depth, 0, 'a refused request leaves no trace')
+    const queued = gate.acquire()
+    await scheduler.settle()
+    assert.equal(gate.snapshot().depth, 1, 'the second request waits instead of failing')
+
+    scheduler.advance(2000)
+    assert.deepEqual(await queued, { kind: 'granted', waitedMs: 2000 })
   })
 
-  test('maxWaitMs 0 makes every exhausted request refuse', async () => {
+  test('a long queue drains in order rather than refusing the tail', async () => {
     const scheduler = new ManualScheduler()
-    const gate = new Gate(nim({ burstSize: 1, maxWaitMs: 0 }), scheduler)
+    const gate = new Gate(nim({ burstSize: 1 }), scheduler)
 
     await gate.acquire()
-    assert.deepEqual(await gate.acquire(), { kind: 'refused', reason: 'wait-timeout' })
+    const waiting = [gate.acquire(), gate.acquire(), gate.acquire()]
+    await scheduler.settle()
+    assert.equal(gate.snapshot().depth, 3, 'depth is bounded by the sources, not by a cap here')
+
+    for (const [i, pending] of waiting.entries()) {
+      scheduler.advance(2000)
+      await scheduler.settle()
+      assert.equal((await pending).kind, 'granted', `waiter ${i} was granted, not refused`)
+    }
   })
 })
 
@@ -127,74 +140,38 @@ describe('Gate FIFO order', () => {
   })
 })
 
-describe('Gate queue bounds', () => {
-  test('refuses beyond maxQueueDepth without disturbing the queue', async () => {
+describe('Gate has no wait bounds', () => {
+  test('every arrival waits its turn, however deep the queue gets', async () => {
+    // This is the behaviour the removed bounds used to prevent, and the reason
+    // they were removed: a refusal here becomes a RATE_LIMIT, which
+    // dsh-llm-retry retries by default, so each one added another request to the
+    // same queue instead of shedding it.
     const scheduler = new ManualScheduler()
-    const gate = new Gate(nim({ burstSize: 1, maxQueueDepth: 2 }), scheduler)
+    const gate = new Gate(nim({ burstSize: 1 }), scheduler)
     await gate.acquire()
 
-    const first = gate.acquire()
-    const second = gate.acquire()
+    const waiting = [gate.acquire(), gate.acquire(), gate.acquire(), gate.acquire()]
     await scheduler.settle()
-    assert.equal(gate.snapshot().depth, 2)
+    assert.equal(gate.snapshot().depth, 4, 'nothing is turned away')
 
-    assert.deepEqual(
-      await gate.acquire(),
-      { kind: 'refused', reason: 'queue-full' },
-      'the third arrival has nowhere to wait',
-    )
-    assert.equal(gate.snapshot().depth, 2, 'the queue still holds exactly the two admitted')
-
-    scheduler.advance(4000)
-    await scheduler.settle()
-    assert.deepEqual(await first, { kind: 'granted', waitedMs: 2000 })
-    assert.deepEqual(await second, { kind: 'granted', waitedMs: 4000 })
-  })
-
-  test('refuses a request whose budget expires before its turn', async () => {
-    const scheduler = new ManualScheduler()
-    // One token per 1000ms (60/min), burstSize 1, maxWaitMs 2500. All three
-    // requests enqueue at t=0, so the third has already spent its whole budget
-    // by the time it reaches the front and must fail rather than wait on.
-    const gate = new Gate(nim({ requestsPerWindow: 60, windowMs: 60_000, burstSize: 1, maxWaitMs: 2500 }), scheduler)
-    await gate.acquire()
-
-    const first = gate.acquire()
-    const second = gate.acquire()
-    const third = gate.acquire()
-    await scheduler.settle()
-
-    scheduler.advance(1000)
-    await scheduler.settle()
-    assert.deepEqual(await first, { kind: 'granted', waitedMs: 1000 })
-
-    scheduler.advance(1000)
-    await scheduler.settle()
-    assert.deepEqual(await second, { kind: 'granted', waitedMs: 2000 })
-
-    // Third is now head at t=2000 with 2000ms waited, still inside budget, but
-    // the bucket is empty again. At t=3000 its wait hits the 2500ms budget.
-    scheduler.advance(1000)
-    await scheduler.settle()
-    assert.deepEqual(
-      await third,
-      { kind: 'refused', reason: 'wait-timeout' },
-      'a request that cannot be served within its budget fails instead of waiting forever',
-    )
+    for (const [i, pending] of waiting.entries()) {
+      scheduler.advance(2000)
+      await scheduler.settle()
+      assert.deepEqual(await pending, { kind: 'granted', waitedMs: 2000 * (i + 1) })
+    }
     assert.equal(gate.snapshot().depth, 0)
   })
 
-  test('a refused arrival does not consume a token', async () => {
+  test('a slow rate makes the wait long, never refused', async () => {
     const scheduler = new ManualScheduler()
-    const gate = new Gate(nim({ burstSize: 2, maxQueueDepth: 0 }), scheduler)
+    // 10/min is Agnes's documented free tier: one token per 6s.
+    const gate = new Gate(nim({ requestsPerWindow: 10, windowMs: 60_000, burstSize: 1 }), scheduler)
+    await gate.acquire()
 
-    await gate.acquire()
-    await gate.acquire()
-    assert.deepEqual(await gate.acquire(), { kind: 'refused', reason: 'queue-full' })
-    // The bucket is untouched, so the next interval's single token is intact
-    // and is handed over with no wait at all.
-    scheduler.advance(2000)
-    assert.deepEqual(await gate.acquire(), { kind: 'granted', waitedMs: 0 })
+    const queued = gate.acquire()
+    await scheduler.settle()
+    scheduler.advance(6000)
+    assert.deepEqual(await queued, { kind: 'granted', waitedMs: 6000 })
   })
 })
 
@@ -258,7 +235,7 @@ describe('Gate cancellation', () => {
 })
 
 describe('Gate disposal', () => {
-  test('disposal refuses everything queued', async () => {
+  test('disposal aborts everything queued', async () => {
     const scheduler = new ManualScheduler()
     const gate = new Gate(nim({ burstSize: 1 }), scheduler)
     await gate.acquire()
@@ -268,8 +245,11 @@ describe('Gate disposal', () => {
     await scheduler.settle()
 
     gate.dispose()
-    assert.deepEqual(await first, { kind: 'refused', reason: 'disposed' })
-    assert.deepEqual(await second, { kind: 'refused', reason: 'disposed' })
+    // Aborted, not refused. A plugin-produced RATE_LIMIT would send
+    // dsh-llm-retry into retries for a turn being torn down, which is the
+    // pointless loop this plugin already avoids on the unload path.
+    assert.deepEqual(await first, { kind: 'aborted' })
+    assert.deepEqual(await second, { kind: 'aborted' })
     assert.equal(gate.snapshot().depth, 0)
   })
 
@@ -277,7 +257,7 @@ describe('Gate disposal', () => {
     const scheduler = new ManualScheduler()
     const gate = new Gate(nim({ burstSize: 5 }), scheduler)
     gate.dispose()
-    assert.deepEqual(await gate.acquire(), { kind: 'refused', reason: 'disposed' })
+    assert.deepEqual(await gate.acquire(), { kind: 'aborted' })
   })
 
   test('disposal cancels the pending timer', async () => {

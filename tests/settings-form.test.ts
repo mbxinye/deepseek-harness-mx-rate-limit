@@ -31,6 +31,9 @@ test('the projected form carries each field with its default', () => {
   const nim = (shown.providers as Record<string, Record<string, unknown> | undefined>).nim
   assert.ok(nim)
   assert.equal(nim.requestsPerWindow, 30)
-  assert.equal(nim.onExhausted, 'wait')
+  // Two numbers and a switch, so the page asks for nothing a free tier does not
+  // document. Nothing here can express a wait bound, which is the point. burstSize
+  // is absent because it has no default: an omitted one resolves to the rate.
+  assert.deepEqual(Object.keys(nim).sort(), ['enabled', 'requestsPerWindow', 'windowMs'])
   assert.equal(shown.purposeScope, 'conversation')
 })

@@ -52,7 +52,7 @@ test('the built artifact mounts on the real llm service and limits a route', asy
   ctx.llm.registerAdapter(['probe'], adapter)
   const scope = ctx.extend({})
   new mod.RateLimiter(scope, mod.Config({
-    providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000, maxQueueDepth: 0 } },
+    providers: { probe: { burstSize: 1, requestsPerWindow: 30, windowMs: 60_000 } },
   }))
 
   const drain = async (model) => {
@@ -72,7 +72,15 @@ test('the built artifact mounts on the real llm service and limits a route', asy
   }
 
   assert.deepEqual(await drain('a'), { terminal: 'stop', code: undefined })
-  assert.deepEqual(await drain('b'), { terminal: 'error', code: 'RATE_LIMIT' })
-  assert.equal(adapter.admitted, 1, 'the refused request never reached the provider')
+
+  // Nothing is refused any more, so "the built artifact limits" is observed as a
+  // wait: one token per 2000ms at 30 per 60s means the second request cannot
+  // arrive sooner. Real timers here, because this suite is about the shipped
+  // artifact rather than a seam.
+  const started = performance.now()
+  assert.deepEqual(await drain('b'), { terminal: 'stop', code: undefined })
+  const waited = performance.now() - started
+  assert.ok(waited >= 1000, `expected the built artifact to hold the second request, waited ${Math.round(waited)}ms`)
+  assert.equal(adapter.admitted, 2, 'the held request reached the provider once a token was free')
   ctx.fiber.dispose()
 })
