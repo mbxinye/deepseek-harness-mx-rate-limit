@@ -51,6 +51,13 @@ dsh plugin --profile desktop add github:mbxinye/deepseek-harness-mx-rate-limit
 `dbb56f1` 钉到 `9a981f3`（= 远端 HEAD），并且不需要 `prepare`、不需要 `allowBuilds`。
 所以装了旧版本不是安装器的毛病，重装一次就是最新的。
 
+> ⚠️ **装完 / 更新完一定要重启宿主。** 这一点和插件本身无关，是宿主的扫描策略：
+> 客户端包的扫描是**逐包增量**的（*there is no full-rescan code path*），而且「这个包
+> 不是客户端包」这个否定结论会被**缓存到进程重启为止**。重装时 `node_modules/<包名>`
+> 目录会被短暂移除，文件监视器如果正好在那个窗口读到缺失的 `package.json`，就会永久
+> 记下否定结论 —— 表现是**插件卡片原本在，重装后反而消失了**，而且宿主日志里不会有
+> 任何报错。重启是唯一的解法。
+
 ### 方式 B：从本地目录装（开发用）
 
 ```bash
@@ -254,7 +261,8 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 |---|---|
 | **加载报找不到入口 / `lib/index.js`** | 本地目录安装时忘了 `npm run build`。Git 安装不该出现 —— `lib/` 已随仓库提交 |
 | **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | 装到的是**还带 `prepare` 脚本的老版本**（`prepare` 已被删除，tarball 的 hash 会告诉你装的是哪个 commit，见 `~/.dsh/profiles/<profile>/.plugin-manager/logs/`）。重装即可 |
-| 插件页里看不到「请求限速」 | ① 先确认你在**插件**页而不是「设置」页；它在**官方**分组里，和 `Agent 循环` 并列。② 确认 profile `package.json` 的 `dsh.profile.bundles` 里有它，且重启过。③ 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 —— 客户端 bundle 是 `lib/client.js`，它注册进浏览器模块表，任一 import 不在表里都会在启动时抛错 |
+| 插件页里看不到「请求限速」 | ① 先确认你在**插件**页而不是「设置」页；它在**官方**分组里，和 `Agent 循环` 并列。② **重装插件后必须重启宿主**，见下面。③ 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 |
+| 装完插件，页面直接消失（之前是好的） | 宿主对「这个包不是客户端包」这个结论**缓存到重启为止**（`client-modules` 的 `pkgMeta`，源码注释：*Negative verdicts remain stable until restart*），而且**没有全量重扫路径**。重装时 `node_modules/<包名>` 会被短暂移除，文件监视器正好在这个窗口读到缺失的 `package.json`，于是永久记下否定结论。**唯一的解法是重启宿主** |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
