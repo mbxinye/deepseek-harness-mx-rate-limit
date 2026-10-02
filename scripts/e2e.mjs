@@ -35,6 +35,7 @@ const result = spawnSync(
     '--import', 'tsx/esm', '--test',
     join(projectRoot, 'e2e', 'integration.test.ts'),
     join(projectRoot, 'e2e', 'artifact.test.ts'),
+    join(projectRoot, 'e2e', 'mount.test.ts'),
   ],
   { cwd: harnessRoot, stdio: 'inherit' },
 )
