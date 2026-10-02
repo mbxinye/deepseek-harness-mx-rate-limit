@@ -42,9 +42,17 @@ github:mbxinye/deepseek-harness-mx-rate-limit
 
 `prepare` 会在安装时自动跑 `npm run build`，所以拉到的仓库不需要预先构建。
 
-> ⚠️ **可能被要求批准构建脚本**：pnpm 11 默认拦截依赖的构建脚本。如果界面弹出
-> "哪些包可以运行安装脚本"，请允许 `dsh-mx-rate-limit` —— 否则 `lib/` 不会生成，
-> 插件加载时会找不到入口。
+> ⚠️ **需要放行构建脚本**：`lib/` 被 gitignore，由 `prepare` 在安装时生成，而 pnpm 11
+> 默认拦截依赖的构建脚本。安装前在 profile 的 `pnpm-workspace.yaml` 里加一行：
+>
+> ```yaml
+> allowBuilds:
+>   dsh-mx-rate-limit@https://codeload.github.com/mbxinye/deepseek-harness-mx-rate-limit/tar.gz/<commit>: true
+> ```
+>
+> ⚠️ 这个 key 是 pnpm 解析出的 tarball 地址，**里面嵌了 commit hash**。裸包名
+> `dsh-mx-rate-limit: true` 不被 pnpm 接受（实测）。所以**每次推送本插件后都要回来
+> 改这一行**，否则重装会失败并报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`。
 
 ### 方式 B：从本地目录装（开发用）
 
@@ -66,14 +74,17 @@ D:/workspace/code/GIT/deepseek-harness-mx-rate-limit
 
 ### 挂载进 profile
 
-安装本身不等于启用。`bundles` 列表里还得有它 —— 编辑
-`C:/Users/mbxin/.dsh/profiles/desktop/package.json`，**两处都要改**：
+**用界面或 `dsh plugin ... add` 安装时不需要手动做任何事。** 本包的 `package.json`
+声明了 `dsh.bundle.patch`，harness 会在安装后自动把它加进
+`dsh.profile.bundles`（见 `app-boot/src/profile-plugins.ts`）并写入 `config`。
+
+安装完成后 profile 里应该长这样：
 
 ```jsonc
 {
   "dependencies": {
     "dsh-mx-mem": "link:D:/workspace/code/GIT/deepseek-harness-mx-mem",
-    "dsh-mx-rate-limit": "link:D:/workspace/code/GIT/deepseek-harness-mx-rate-limit"
+    "dsh-mx-rate-limit": "github:mbxinye/deepseek-harness-mx-rate-limit"
   },
   "dsh": {
     "profile": {
@@ -88,14 +99,20 @@ D:/workspace/code/GIT/deepseek-harness-mx-rate-limit
 }
 ```
 
-如果用界面装的，依赖那行通常已经写好了，确认一下 `bundles` 里有它即可。
-需要时用 harness 自己的命令补装依赖（它会处理 profile 的 pnpm 锁文件）：
-
-```bash
-dsh plugin --profile desktop install
-```
+注意 `dsh-mx-rate-limit` 那行是 `github:` 而不是 `link:` —— **`link:` 只在本地开发时用**
+（见方式 B），指向本机目录意味着每次改代码都要自己重新 build。
 
 最后**重启桌面端** —— profile patch 在启动时读取。
+
+### 命令行等价写法
+
+```bash
+# 安装（会自动写好 dependencies 和 bundles）
+dsh plugin --profile desktop add github:mbxinye/deepseek-harness-mx-rate-limit
+
+# 只补装依赖，不改清单
+dsh plugin --profile desktop install
+```
 
 ---
 
@@ -237,8 +254,8 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 
 | 现象 | 原因 |
 |---|---|
-| **加载报找不到入口 / `lib/index.js`** | `lib/` 没生成。Git 安装时检查有没有批准构建脚本；本地目录安装时先跑 `npm run build` |
-| 设置页没有 `llm-rate-limit` 分区 | 插件没挂上。检查 profile `package.json` 的 `bundles`，以及装完有没有重启 |
+| **加载报找不到入口 / `lib/index.js`** | `lib/` 没生成。Git 安装时检查 profile 的 `pnpm-workspace.yaml` 里 `allowBuilds` 有没有加这个包；本地目录安装时先跑 `npm run build` |
+| 设置页没有 `llm-rate-limit` 分区 | 插件没挂上。检查 profile `package.json` 的 `bundles` 里有没有它，以及装完有没有重启 |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
