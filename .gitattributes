@@ -1,0 +1,9 @@
+# Normalize line endings in the repository.
+#
+# `scripts/verify-build.mjs` compares lib/ by content hash against a fresh
+# build, so a checkout that rewrites LF to CRLF would report every file as
+# drifted. Pinning LF keeps that check meaningful on Windows as well.
+* text=auto eol=lf
+
+# Generated JavaScript and declarations are text; keep them normalized too.
+lib/** text eol=lf
