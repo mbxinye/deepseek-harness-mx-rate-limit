@@ -14,6 +14,10 @@
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
     }
   },
   "files": [
@@ -24,13 +28,30 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "external": [
+        "@deepseek-ai/dsh-client-locale/client",
+        "@deepseek-ai/dsh-client-ui-settings/client",
+        "@deepseek-ai/dsh-client-ui-plugin-manager/client",
+        "@deepseek-ai/dsh-client-ui-renderer/client"
+      ]
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:client": "tsdown --config tsdown.client.config.mjs",
+    "build:all": "npm run build && npm run build:client",
     "test": "node --test \"tests/**/*.test.ts\"",
     "test:e2e": "node scripts/e2e.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json",
     "verify:build": "node scripts/verify-build.mjs"
   },
   "dependencies": {
@@ -50,6 +71,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
+    "@types/react": "^18.3.1",
+    "react": "^18.3.1",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.0"
   }
 }

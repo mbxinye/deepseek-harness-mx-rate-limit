@@ -34,5 +34,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "tests"]
+  "include": ["src/index.ts", "src/bucket.ts", "src/config.ts", "src/gate.ts", "tests"]
 }

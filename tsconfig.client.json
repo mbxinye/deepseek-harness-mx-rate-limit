@@ -1,0 +1,47 @@
+{
+  // Type-checks the browser half. Distinct from tsconfig.json (the Host half)
+  // because the two resolve different packages.
+  //
+  // The harness client packages resolve to their BUILT declarations
+  // (`lib/types`), not their sources: those sources import CSS modules and
+  // other assets that only the harness's own bundler pipeline resolves, so
+  // compiling them here would report the harness's setup as this package's
+  // errors.
+  //
+  // React resolves from node_modules. In the shipped bundle it is a module-table
+  // row instead — an import the browser's injected `require` answers — so it
+  // must never be inlined, which the bundle's `deps` rule enforces at build time.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/dsh-client-locale/client": ["../deepseek-harness/packages/client/locale/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-settings/client": ["../deepseek-harness/packages/client/ui-settings/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-plugin-manager/client": ["../deepseek-harness/packages/client/ui-plugin-manager/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-renderer/client": ["../deepseek-harness/packages/client/ui-renderer/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-primitives": ["../deepseek-harness/packages/client/ui-primitives/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-slots": ["../deepseek-harness/packages/client/ui-slots/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-store": ["../deepseek-harness/packages/client/store/lib/types/index.d.ts"],
+      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/lib/types/index.d.ts"]
+    },
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/client"]
+}

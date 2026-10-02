@@ -45,6 +45,13 @@ if (build.status !== 0) {
   process.exit(1)
 }
 
+const client = run('npx', ['tsdown', '--config', 'tsdown.client.config.mjs'])
+if (client.status !== 0) {
+  console.error('verify:build — the client bundle failed, so it cannot be compared:')
+  console.error(client.stdout || client.stderr)
+  process.exit(1)
+}
+
 const built = fingerprint(lib)
 const problems = []
 
