@@ -31,7 +31,7 @@
     "test": "node --test \"tests/**/*.test.ts\"",
     "test:e2e": "node scripts/e2e.mjs",
     "typecheck": "tsc --noEmit",
-    "prepare": "npm run build"
+    "verify:build": "node scripts/verify-build.mjs"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4"
