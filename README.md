@@ -107,11 +107,12 @@ dsh plugin --profile desktop install
 
 ### 方式 A：设置页（推荐）
 
-插件的每个配置字段都是 `volatile` 的，所以 harness 会自动为它生成一个设置页 ——
-**不需要写任何前端**。页面出现在设置里的 `llm-rate-limit` 分区，编辑后写回你的
-profile patch，立即生效。
+设置 → 插件 → **请求限速**。本插件自带客户端半边，装上即可用。
 
-在 `llm-pi-ai` 的设置里可以看到你现有的 route id，把限流配置的 key 填成同样的名字：
+页面上能改：总开关、计入范围（仅主对话 / 含辅助请求）、以及每个 route 一行
+的 7 个字段。保存后写回你的 profile patch，**立即生效，不用重启**。
+
+在 `llm-pi-ai` 的设置里可以看到你现有的 route id，把它们填进「受限的 route」：
 
 | 你 profile 里的 route | 用途 |
 |---|---|
@@ -243,7 +244,7 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 |---|---|
 | **加载报找不到入口 / `lib/index.js`** | 本地目录安装时忘了 `npm run build`。Git 安装不该出现 —— `lib/` 已随仓库提交 |
 | **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | `node_modules/.pnpm/lock.yaml` 里钉着旧 commit（那个版本还有 `prepare` 脚本）。删掉 profile 的 `node_modules` 重装 |
-| 设置页没有 `llm-rate-limit` 分区 | 插件没挂上。检查 profile `package.json` 的 `bundles` 里有没有它，以及装完有没有重启 |
+| 插件页里看不到「请求限速」 | ① 确认 `bundles` 里有它并重启过；② 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 —— 客户端 bundle 是 `lib/client.js`，它注册进浏览器模块表，任一 import 不在表里都会在启动时抛错 |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
@@ -290,20 +291,33 @@ npm run build && npm run verify:build && npm run typecheck && npm test && npm ru
 
 | 层 | 数量 | 跑在什么上 |
 |---|---|---|
-| 单元 | 64 | 纯逻辑，手动时钟驱动，无任何依赖 |
+| 单元 | 95 | 纯逻辑 + 客户端暂存模型，手动时钟驱动，无任何依赖 |
 | 集成 | 11 | **真实的 `LlmRuntime` + 真实的 Cordis 上下文过滤器**，只有模型适配器是替身 |
 | 产物 | 2 | **构建后的 `lib/index.js`**，验证安装路径而不只是源码 |
+
+> **客户端 UI 没有端到端测试。** 宿主半边能在 Node 里挂载真实服务来验证；浏览器
+> 半边需要真实的 client runtime 和一个浏览器，而这里两者都不具备。客户端逻辑
+> 的可测部分（暂存、校验、原子写入）都在 `model.ts` 里并已覆盖；「页面是否出现、
+> 保存是否生效」只能在桌面端确认。
 
 集成测试必须以 harness 根目录为 cwd 运行（`scripts/e2e.mjs` 负责这件事），
 因为 `@deepseek-ai/*` 是通过 harness 的 tsconfig path 表解析的。harness 不在兄弟
 目录时用 `DSH_ROOT` 指定。
 
-### 关于 `internals` 参数
+### 客户端半边
 
-`RateLimiter` 的构造函数有第三个参数 `internals`（用于注入调度器）。**它只能通过
-直接 `new` 生效** —— Cordis 实例化类插件时只传 `(ctx, config)` 两个参数，所以经
-Loader 挂载时它恒为 `{}`，生产路径永远走 `defaultScheduler()`。集成测试里有一组用例
-专门覆盖真实定时器路径。
+设置页是**独立的客户端插件**（同包，`src/client/`）。这不是可选项：Harness 不会
+根据插件的 `Config` 自动生成设置页 —— 服务端虽然算出了 `autoGenerate` 标志，但客户端
+没有任何代码读它，每个设置页都是 `plugins.item` 槽位的贡献者。
+
+`src/client/model.ts` 是暂存表单模型，**不含 React 也不 import 任何 harness 包**，
+所以能在纯 Node 里测；React 层负责把它包进客户端的 snapshot store。这个拆分也是
+为什么它没有基于共享的 `SettingsFormModel`：那个模型只发单段写入路径，而本插件的
+配置是嵌套的（`providers.<route>.<field>`）。
+
+浏览器 bundle 由 `tsdown.client.config.mjs` 产出，形如 harness 客户端预设要求的
+CJS 闭包工厂。harness 自带的预设**用不了** —— 它靠 glob 自己的仓库目录结构定位包，
+树外的包会直接抛错。
 
 ---
 
