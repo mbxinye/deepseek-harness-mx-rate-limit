@@ -1,17 +1,33 @@
 {
-  // Emits the shipped artifact. The harness loads this package through Node's
-  // ESM resolver, so the entry must be JavaScript — the desktop build does not
-  // strip TypeScript types. `rewriteRelativeImportExtensions` turns the `.ts`
-  // specifiers used in source into the `.js` ones Node must resolve.
-  "extends": "./tsconfig.json",
+  // The BUILD config, standalone on purpose — it does not extend tsconfig.json.
+  //
+  // Typechecking needs the harness checkout (tsconfig.json maps `@deepseek-ai/*`
+  // at `../deepseek-harness`), but the BUILD must not. This package is compiled
+  // by `prepare` inside a temporary clone during a git-hosted install, where no
+  // harness checkout exists; a config that resolved those specifiers would fail
+  // with TS2307 and take the whole install down with it.
+  //
+  // `noCheck` makes this a pure transpile. The harness supplies these modules at
+  // runtime, so their absence at build time is expected rather than an error.
+  // Type errors are caught separately by `npm run typecheck`.
   "compilerOptions": {
-    "noEmit": false,
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "types": [],
+
+    "strict": true,
+    "skipLibCheck": true,
+
+    "noCheck": true,
     "outDir": "lib",
     "rootDir": "src",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "rewriteRelativeImportExtensions": true
+    "sourceMap": true
   },
   "include": ["src"]
 }
