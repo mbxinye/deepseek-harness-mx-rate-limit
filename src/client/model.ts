@@ -133,6 +133,30 @@ export interface RateLimitCardFace extends CardActions {
 }
 
 /**
+ * The product's intended limits, shown for a route that stores none yet.
+ *
+ * A freshly added route has no resolved value, so every field would render blank
+ * and the user would have to type all five numbers to get the documented
+ * behaviour. Prefilling them makes "add this route and accept the defaults" a
+ * single click, and makes the recommended limit visible rather than folklore.
+ *
+ * `burstSize` is deliberately absent. The Host gives it no default and resolves
+ * an omitted one as `requestsPerWindow`, so leaving it blank is not an unset
+ * value — it is exactly "the same as the rate", and it keeps following the rate
+ * if the user edits that. Prefilling a number here would quietly stop tracking.
+ *
+ * These duplicate the Host schema's defaults, which a client package cannot
+ * import. `tests/preset.test.ts` reads the Host schema and fails if the two ever
+ * drift, so the duplication is checked rather than merely noted.
+ */
+export const ROUTE_DEFAULTS: Readonly<Record<string, number>> = {
+  requestsPerWindow: 30,
+  windowMs: 60_000,
+  maxQueueDepth: 16,
+  maxWaitMs: 60_000,
+}
+
+/**
  * The read side a renderer binds. Deliberately the store's own shape rather
  * than the client's `SnapshotStore` type: keeping that import out of this
  * module is what lets the whole staged model be tested in plain Node, with no
@@ -373,7 +397,11 @@ export class RateLimitController {
     const stored = readPath(snapshot.value, path)
     if (staged === undefined) {
       return {
-        text: formatScalar(stored),
+        // A route that stores nothing yet still has a limit — the Host schema
+        // defaults apply to it — so show the recommended value rather than a
+        // blank that reads as "unset". `overridden` stays false, so the badge
+        // still says plainly that nothing is pinned.
+        text: formatScalar(stored ?? this.recommended(path)),
         overridden: storedPath(snapshot.user, path),
         invalid: false,
       }
@@ -382,6 +410,11 @@ export class RateLimitController {
       return { text: formatScalar(readPath(snapshot.base, path)), overridden: false, invalid: false }
     }
     return { text: staged.text, overridden: true, invalid: false }
+  }
+
+  /** @returns the recommended value for one leaf, or undefined when it has none. */
+  private recommended(path: readonly string[]): number | undefined {
+    return ROUTE_DEFAULTS[path[path.length - 1] ?? '']
   }
 
   /**
