@@ -46,6 +46,11 @@ github:mbxinye/deepseek-harness-mx-rate-limit
 dsh plugin --profile desktop add github:mbxinye/deepseek-harness-mx-rate-limit
 ```
 
+**更新就用同一条命令。** 安装器执行的是 `pnpm add <spec>`（`packages/boot/plugin-manager/src/index.ts`），
+不带 ref 的 `github:` 依赖每次都会重新解析到仓库当前 HEAD —— 实测把 lockfile 从
+`dbb56f1` 钉到 `9a981f3`（= 远端 HEAD），并且不需要 `prepare`、不需要 `allowBuilds`。
+所以装了旧版本不是安装器的毛病，重装一次就是最新的。
+
 ### 方式 B：从本地目录装（开发用）
 
 ```bash
@@ -248,9 +253,8 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 | 现象 | 原因 |
 |---|---|
 | **加载报找不到入口 / `lib/index.js`** | 本地目录安装时忘了 `npm run build`。Git 安装不该出现 —— `lib/` 已随仓库提交 |
-| **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | `node_modules/.pnpm/lock.yaml` 里钉着旧 commit（那个版本还有 `prepare` 脚本）。删掉 profile 的 `node_modules` 重装 |
+| **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | 装到的是**还带 `prepare` 脚本的老版本**（`prepare` 已被删除，tarball 的 hash 会告诉你装的是哪个 commit，见 `~/.dsh/profiles/<profile>/.plugin-manager/logs/`）。重装即可 |
 | 插件页里看不到「请求限速」 | ① 先确认你在**插件**页而不是「设置」页；它在**官方**分组里，和 `Agent 循环` 并列。② 确认 profile `package.json` 的 `dsh.profile.bundles` 里有它，且重启过。③ 若报客户端模块加载错误，看宿主日志里 `mx-rate-limit` 的行 —— 客户端 bundle 是 `lib/client.js`，它注册进浏览器模块表，任一 import 不在表里都会在启动时抛错 |
-| 用 app 里的安装器装完还是旧的 | 安装器解析 git 依赖时命中了缓存的旧 commit（日志在 `~/.dsh/profiles/<profile>/.plugin-manager/logs/`，会报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`，tarball 里的 hash 是历史 commit）。删掉 profile 的 `node_modules` **和 `pnpm-lock.yaml`**，再 `pnpm install` |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
 | 感觉变慢但没有 429 | 正常 —— 这就是排队在工作。调 `requestsPerWindow` 或 `burstSize` |
