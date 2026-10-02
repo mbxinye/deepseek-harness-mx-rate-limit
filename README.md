@@ -30,47 +30,34 @@
 ## 安装
 
 插件安装功能接受三种来源：**包名**、**GitHub 仓库地址**、**本地目录路径**。
-`lib/` 是构建产物，已被 `.gitignore` 排除，由 `prepare` 脚本在安装时自动生成。
+
+安装**不需要放行构建脚本、不需要任何额外配置** —— 编译后的 `lib/` 已随仓库提交，
+安装时不做任何构建。
 
 ### 方式 A：从 GitHub 仓库装（分享给别人的方式）
 
-在桌面端的插件安装界面里填仓库地址：
+桌面端插件安装界面填仓库地址，或用命令行：
 
 ```
 github:mbxinye/deepseek-harness-mx-rate-limit
 ```
 
-`prepare` 会在安装时自动跑 `npm run build`，所以拉到的仓库不需要预先构建。
-
-> ⚠️ **需要放行构建脚本**：`lib/` 被 gitignore，由 `prepare` 在安装时生成，而 pnpm 11
-> 默认拦截依赖的构建脚本。安装前在 profile 的 `pnpm-workspace.yaml` 里加一行：
->
-> ```yaml
-> allowBuilds:
->   dsh-mx-rate-limit@https://codeload.github.com/mbxinye/deepseek-harness-mx-rate-limit/tar.gz/<commit>: true
-> ```
->
-> ⚠️ 这个 key 是 pnpm 解析出的 tarball 地址，**里面嵌了 commit hash**。裸包名
-> `dsh-mx-rate-limit: true` 不被 pnpm 接受（实测）。所以**每次推送本插件后都要回来
-> 改这一行**，否则重装会失败并报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`。
+```bash
+dsh plugin --profile desktop add github:mbxinye/deepseek-harness-mx-rate-limit
+```
 
 ### 方式 B：从本地目录装（开发用）
-
-pnpm 对本地目录是**软链接**，不会执行 `prepare`，所以**必须先自己构建**：
 
 ```bash
 cd D:/workspace/code/GIT/deepseek-harness-mx-rate-limit
 npm install
-npm run build          # 产出 lib/index.js —— profile 加载的就是这个
+npm run build          # 改了 src/ 就要重新 build
 ```
 
-然后在插件安装界面填：
+然后填 `D:/workspace/code/GIT/deepseek-harness-mx-rate-limit`。
 
-```
-D:/workspace/code/GIT/deepseek-harness-mx-rate-limit
-```
-
-> 之后改了 `src/` 要重新 `npm run build`，因为改的是 `lib/`。
+> 本地目录是软链接，profile 直接用你的工作目录 —— 改 `src/` 后重新
+> `npm run build` 即生效，不用提交。
 
 ### 挂载进 profile
 
@@ -254,7 +241,8 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 
 | 现象 | 原因 |
 |---|---|
-| **加载报找不到入口 / `lib/index.js`** | `lib/` 没生成。Git 安装时检查 profile 的 `pnpm-workspace.yaml` 里 `allowBuilds` 有没有加这个包；本地目录安装时先跑 `npm run build` |
+| **加载报找不到入口 / `lib/index.js`** | 本地目录安装时忘了 `npm run build`。Git 安装不该出现 —— `lib/` 已随仓库提交 |
+| **报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`** | `node_modules/.pnpm/lock.yaml` 里钉着旧 commit（那个版本还有 `prepare` 脚本）。删掉 profile 的 `node_modules` 重装 |
 | 设置页没有 `llm-rate-limit` 分区 | 插件没挂上。检查 profile `package.json` 的 `bundles` 里有没有它，以及装完有没有重启 |
 | 插件在但完全不生效 | 检查 `providers` 的 key 是不是 route id。key 写错 = 不在白名单 = 不限流（这是设计，不是 bug）|
 | 还是收到 429 | `providers` 里没配这个 route；或者配额被别人占用（那是 `llm-retry` 的活）|
@@ -280,14 +268,23 @@ llm-rate-limit: queued a nvidia request on "deepseek-ai/deepseek-v4-flash-0731" 
 ## 开发
 
 ```bash
-npm install           # 装依赖，并自动跑 prepare（即 build）
-npm run build         # 需要时手动重建 lib/
+npm install           # 只装开发依赖（typescript 等），不构建
+npm run build         # 编译 src/ → lib/；改了 src/ 就要跑
+npm run verify:build  # 确认已提交的 lib/ 与 src/ 一致
 npm run typecheck     # 只检查本包；harness 各包用各自放宽的 tsconfig
 npm test              # 64 个单元测试（token 桶 / 配置 / 队列）
 npm run test:e2e      # 13 个集成测试，跑在真实 LlmRuntime 上
 ```
 
-提交前跑一遍 `npm run build && npm run typecheck && npm test && npm run test:e2e`。
+提交前跑一遍：
+
+```bash
+npm run build && npm run verify:build && npm run typecheck && npm test && npm run test:e2e
+```
+
+`lib/` 是**提交进仓库**的（见 `.gitignore` 里的说明），这样安装时零构建、零配置。
+代价是 `src/` 和 `lib/` 可能不同步 —— `verify:build` 就是防这个的，它比对新鲜构建
+与 git 记录的内容，不一致就失败。
 
 ### 测试分层
 
