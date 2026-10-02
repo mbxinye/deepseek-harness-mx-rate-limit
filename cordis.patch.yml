@@ -1,0 +1,34 @@
+# Bundle layer for dsh-mx-rate-limit, applied when a profile lists this package in
+# `dsh.profile.bundles`.
+#
+# Rows name the PACKAGE, not a relative path: a profile installs this plugin
+# through `link:`, so Node resolution must find the built `lib/index.js` in
+# node_modules rather than a source tree that may not be present.
+#
+# Config here is the DEPLOYMENT default. Every field below is volatile, so the
+# settings page renders them and a user edit is written back to their own profile
+# patch, which is a later layer and therefore wins.
+#
+# Nothing is limited until a route is named under `providers`: the dict is a
+# whitelist, so mounting this plugin cannot slow a paid route sharing the process.
+- insert:
+    - id: llm-rate-limit
+      name: dsh-mx-rate-limit
+      config:
+        # Limit only ordinary conversation requests. Compaction and session-title
+        # calls share the provider's quota but must not spend the budget the
+        # conversation needs, and a queued title only delays the first screen.
+        purposeScope: conversation
+        providers:
+          # NIM's free tier is 30 requests per minute. Uncomment and rename this
+          # key to your own route id, or add one profile per route you want held
+          # to a quota.
+          #
+          # nim:
+          #   requestsPerWindow: 30
+          #   windowMs: 60000
+          #   burstSize: 30
+          #   onExhausted: wait
+          #   maxQueueDepth: 16
+          #   maxWaitMs: 60000
+          {}

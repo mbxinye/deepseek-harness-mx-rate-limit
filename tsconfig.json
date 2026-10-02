@@ -1,0 +1,38 @@
+{
+  // Type-checks this package only. The harness packages resolve to their BUILT
+  // declarations (`lib/types`) rather than their sources: those are compiled
+  // under each package's own tsconfig (vendor/cordis relaxes `strict`,
+  // `noImplicitThis` and friends), so pulling their `.ts` in here would report
+  // the harness's settings as this package's errors.
+  //
+  // The versions this package pins match the harness checkout exactly
+  // (cosmokit 1.8.5, schemastery 3.18.4), so a `.d.ts` and a `.ts` of the same
+  // package describe the same surface.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": ["../deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm": ["../deepseek-harness/packages/llm/llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm/types": ["../deepseek-harness/packages/llm/llm/lib/types/types.d.ts"]
+    },
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "tests"]
+}

@@ -1,0 +1,17 @@
+{
+  // Emits the shipped artifact. The harness loads this package through Node's
+  // ESM resolver, so the entry must be JavaScript — the desktop build does not
+  // strip TypeScript types. `rewriteRelativeImportExtensions` turns the `.ts`
+  // specifiers used in source into the `.js` ones Node must resolve.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "lib",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"]
+}
