@@ -8,6 +8,7 @@ export type RateLimitLocaleKey =
   | 'enabled' | 'enabledHint'
   | 'purposeScope' | 'purposeConversation' | 'purposeAll' | 'purposeHint'
   | 'routesTitle' | 'routesHint' | 'routesEmpty'
+  | 'availableTitle' | 'availableHint' | 'availableEmpty' | 'addThisRoute'
   | 'newRoute' | 'addRoute' | 'newRouteInvalid'
   | 'removeRoute' | 'removeRouteConfirm'
   | 'routeEnabled'
@@ -33,7 +34,11 @@ export const en: Record<RateLimitLocaleKey, string> = {
   routesTitle: 'Limited routes',
   routesHint: 'Only the routes listed here are limited. Every other route runs untouched.',
   routesEmpty: 'No route is limited yet, so every model call passes straight through.',
-  newRoute: 'Add a route',
+  availableTitle: 'Providers in this deployment',
+  availableHint: 'Read from your model provider settings. Pick one to start limiting it.',
+  availableEmpty: 'Every provider here is already limited.',
+  addThisRoute: 'Limit this provider',
+  newRoute: 'Or type a route id',
   addRoute: 'Add',
   newRouteInvalid: 'Name a route that is not already listed.',
   removeRoute: 'Remove',
@@ -76,7 +81,11 @@ export const zh: Record<RateLimitLocaleKey, string> = {
   routesTitle: '受限的 route',
   routesHint: '只有列在这里的 route 会被限流，其余 route 完全不受影响。',
   routesEmpty: '还没有任何 route 被限流，所有模型请求都会直接通过。',
-  newRoute: '添加 route',
+  availableTitle: '本部署里的 provider',
+  availableHint: '从你的模型提供商设置里读到的。点一个就开始对它限流。',
+  availableEmpty: '这里的 provider 都已经在限流了。',
+  addThisRoute: '限制这个 provider',
+  newRoute: '或手动输入 route id',
   addRoute: '添加',
   newRouteInvalid: '请填写一个尚未列出的 route 名。',
   removeRoute: '移除',

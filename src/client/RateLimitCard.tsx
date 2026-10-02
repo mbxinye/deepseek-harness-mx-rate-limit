@@ -223,6 +223,29 @@ export function RateLimitCard(props: RateLimitCardProps) {
           t={t}
         />
       ))}
+      {state.offered.length > 0 ? (
+        <>
+          <h3>{t('availableTitle')}</h3>
+          <p>{t('availableHint')}</p>
+          <ul>
+            {state.offered.map(route => (
+              <li key={`avail-${route}`}>
+                <Button
+                  variant="outline"
+                  disabled={disabled}
+                  title={t('addThisRoute')}
+                  onClick={() => { props.addRoute(route) }}
+                >
+                  {route}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {state.routes.length > 0 && state.offered.length === 0 ? (
+        <p role="status">{t('availableEmpty')}</p>
+      ) : null}
       <Input
         value={state.newRoute}
         placeholder={t('newRoute')}

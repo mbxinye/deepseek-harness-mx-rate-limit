@@ -8,6 +8,7 @@ import {
   RateLimitController,
 } from '../src/client/model.ts'
 import { FakeScope } from './helpers/fake-scope.ts'
+import { FakeCatalog } from './helpers/fake-catalog.ts'
 
 describe('parseScalar', () => {
   test('a blank draft clears the field', () => {
@@ -273,6 +274,64 @@ describe('RateLimitController route rows', () => {
     card.actions().addRoute('   ')
     assert.equal(card.shell().dirty, false)
     card.dispose()
+  })
+})
+
+describe('RateLimitController catalog', () => {
+  test('offers every provider the deployment has and this page does not limit', () => {
+    const scope = new FakeScope({ providers: { nvidia: {} } })
+    const card = new RateLimitController(scope, new FakeCatalog(['nvidia', 'zai', 'agnes-ai']))
+    assert.deepEqual(card.offered(), ['zai', 'agnes-ai'], 'a limited route is not offered again')
+    card.dispose()
+  })
+
+  test('a staged addition leaves the offered list before the save', () => {
+    const scope = new FakeScope({ providers: {} })
+    const card = new RateLimitController(scope, new FakeCatalog(['zai']))
+    assert.deepEqual(card.offered(), ['zai'])
+    card.actions().addRoute('zai')
+    assert.deepEqual(card.offered(), [], 'offering it twice would add it twice')
+    card.dispose()
+  })
+
+  test('no catalog means no offered names, and manual entry still works', () => {
+    const scope = new FakeScope({ providers: {} })
+    const card = new RateLimitController(scope)
+    assert.deepEqual(card.offered(), [])
+    card.actions().addRoute('typed-by-hand')
+    assert.deepEqual(card.state().routes, ['typed-by-hand'])
+    card.dispose()
+  })
+
+  test('an unserved catalog offers nothing rather than guessing', () => {
+    const scope = new FakeScope({ providers: {} })
+    for (const status of ['loading', 'unavailable'] as const) {
+      const card = new RateLimitController(scope, new FakeCatalog(['zai'], status))
+      assert.deepEqual(card.offered(), [], `${status} must not produce names`)
+      card.dispose()
+    }
+  })
+
+  test('a catalog change republishes, so the offered list stays live', () => {
+    const scope = new FakeScope({ providers: {} })
+    const catalog = new FakeCatalog(['zai'])
+    const card = new RateLimitController(scope, catalog)
+    let seen = 0
+    card.subscribe(() => { seen += 1 })
+    const before = seen
+    catalog.serve(['zai', 'agnes-ai'])
+    assert.ok(seen > before, 'the page learns about a new provider without a reload')
+    assert.deepEqual(card.offered(), ['zai', 'agnes-ai'])
+    card.dispose()
+  })
+
+  test('dispose releases the catalog subscription too', () => {
+    const scope = new FakeScope({ providers: {} })
+    const catalog = new FakeCatalog(['zai'])
+    const card = new RateLimitController(scope, catalog)
+    assert.equal(catalog.listenerCount, 1)
+    card.dispose()
+    assert.equal(catalog.listenerCount, 0, 'a disposed controller stops listening')
   })
 })
 

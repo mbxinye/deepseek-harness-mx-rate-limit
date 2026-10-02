@@ -18,7 +18,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 
 import { RateLimitCard } from './RateLimitCard.tsx'
 import { cardFace } from './face.ts'
-import { RATE_LIMIT_NS, RateLimitController } from './model.ts'
+import { CATALOG_NS, RATE_LIMIT_NS, RateLimitController } from './model.ts'
 import { en, zh, type RateLimitLocaleKey } from './locales.ts'
 
 export type { RateLimitCardProps } from './RateLimitCard.tsx'
@@ -32,6 +32,7 @@ export type {
   RateLimitCardFace,
   RateLimitScope,
   RateLimitSection,
+  RouteCatalog,
 } from './model.ts'
 export type { RateLimitLocaleKey } from './locales.ts'
 
@@ -55,7 +56,10 @@ export const inject = ['slots', 'locale', 'configForms']
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'mx-rate-limit: dictionaries')
-  const card = new RateLimitController(ctx.configForms.get(RATE_LIMIT_NS))
+  // The provider namespace is optional: a deployment serving none simply offers
+  // no names to pick from, and manual entry stays the only way in.
+  const catalog = ctx.configForms.get(CATALOG_NS)
+  const card = new RateLimitController(ctx.configForms.get(RATE_LIMIT_NS), catalog)
   ctx.effect(() => () => { card.dispose() }, 'mx-rate-limit: form subscription')
   ctx.effect(
     () => ctx.configForms.whileServed([RATE_LIMIT_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({

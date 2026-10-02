@@ -74,7 +74,7 @@ export interface FieldState {
   invalid: boolean
 }
 
-/** Card-level state shared with the shared settings form frame. */
+/** The card-level state shared with the shared settings form frame. */
 export interface CardShell {
   available: boolean
   writable: boolean
@@ -82,6 +82,31 @@ export interface CardShell {
   invalid: boolean
   saving: boolean
   failed: boolean
+}
+
+/**
+ * The provider namespace whose dict keys ARE the routes.
+ *
+ * Read-only on purpose: this page offers names to limit, and every number stays
+ * in its own namespace. A deployment serving no such namespace simply offers
+ * nothing, which is honest — better an empty list than a guessed one.
+ */
+export const CATALOG_NS = 'llm-pi-ai'
+
+/**
+ * What this page reads of the provider namespace.
+ *
+ * `value` is `unknown` on purpose: the page must not claim to know another
+ * plugin's config shape, only that a `providers` dict may sit at its root. A
+ * namespace that turned out to hold something else yields no names rather than a
+ * wrong list.
+ */
+export interface RouteCatalog {
+  getSnapshot: () => {
+    status: 'loading' | 'ready' | 'unavailable'
+    value: unknown
+  }
+  subscribe: (listener: () => void) => () => void
 }
 
 /** Actions the page's slot entry injects. */
@@ -122,7 +147,19 @@ export interface CardStateStore {
 export interface CardState extends CardShell {
   /** Route ids present in the stored section, in stored order. */
   routes: readonly string[]
-  /** Draft text for a staged new route id. */
+  /**
+   * Route ids the deployment actually has, and this page does not limit yet.
+   *
+   * Offering these is the difference between a form that lists what the system
+   * has and one that asks the user to remember a key nobody types by hand. Empty
+   * when the catalog namespace is not served, which leaves manual entry as the
+   * only way in rather than pretending the list is complete.
+   *
+   * Named `offered`, not `available`: `CardShell.available` already means the
+   * Host serves this namespace, and one field cannot mean both.
+   */
+  offered: readonly string[]
+  /** Draft text for a new route id typed by hand. */
   newRoute: string
   /** Whether that draft names a route that is not already configured. */
   newRouteValid: boolean
@@ -224,6 +261,8 @@ interface PlannedWrite {
 export class RateLimitController {
   /** The shared configuration form this page stages over. */
   private readonly scope: RateLimitScope
+  /** Where unconfigured route ids are offered from, when the Host serves one. */
+  private readonly catalog: RouteCatalog | undefined
   private readonly staged = new Map<string, Staged>()
   private readonly removals = new Set<string>()
   private readonly added = new Set<string>()
@@ -233,16 +272,27 @@ export class RateLimitController {
   private failed = false
   private readonly listeners = new Set<() => void>()
   private readonly unsubscribe: () => void
+  private readonly unsubscribers: (() => void)[] = []
 
-  /** @param scope - the shared configuration form for the `llm-rate-limit` namespace. */
-  constructor(scope: RateLimitScope) {
+  /**
+   * Mount the staged model over one namespace.
+   *
+   * @param scope - the shared configuration form for the `llm-rate-limit` namespace.
+   * @param catalog - the provider namespace to offer unconfigured routes from; omit
+   *   when the deployment does not serve one, which leaves manual entry as the only path.
+   */
+  constructor(scope: RateLimitScope, catalog?: RouteCatalog) {
     this.scope = scope
+    this.catalog = catalog
     this.unsubscribe = scope.subscribe(() => { this.publish() })
+    if (catalog !== undefined) this.unsubscribers.push(catalog.subscribe(() => { this.publish() }))
   }
 
   /** Release the accepted-value subscription. */
   dispose(): void {
     this.unsubscribe()
+    for (const off of this.unsubscribers) off()
+    this.unsubscribers.length = 0
     this.listeners.clear()
   }
 
@@ -266,6 +316,7 @@ export class RateLimitController {
     return {
       ...this.shell(),
       routes: this.routes(),
+      offered: this.offered(),
       newRoute: draft.text,
       newRouteValid: draft.valid,
       field: (path) => this.field(path),
@@ -275,6 +326,24 @@ export class RateLimitController {
 
   private publish(): void {
     for (const listener of this.listeners) listener()
+  }
+
+  /**
+   * Route ids the deployment has that this page does not limit yet.
+   *
+   * Staged additions are excluded too, so a route added but not yet saved is not
+   * offered a second time.
+   * @returns unconfigured route ids, in the catalog's own order.
+   */
+  offered(): string[] {
+    const snapshot = this.catalog?.getSnapshot()
+    if (snapshot === undefined || snapshot.status !== 'ready') return []
+    const root = snapshot.value
+    if (root === null || typeof root !== 'object') return []
+    const providers = (root as { providers?: unknown }).providers
+    if (providers === null || typeof providers !== 'object') return []
+    const configured = new Set(this.routes())
+    return Object.keys(providers).filter(route => !configured.has(route))
   }
 
   /** @returns the stored section, or an empty one before the first acceptance. */
