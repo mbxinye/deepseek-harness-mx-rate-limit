@@ -37,7 +37,7 @@
 在桌面端的插件安装界面里填仓库地址：
 
 ```
-github:mbxin/deepseek-harness-mx-rate-limit
+github:mbxinye/deepseek-harness-mx-rate-limit
 ```
 
 `prepare` 会在安装时自动跑 `npm run build`，所以拉到的仓库不需要预先构建。
