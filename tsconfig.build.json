@@ -29,5 +29,9 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src"]
+  // Only the Host half. The browser half is bundled by tsdown.client.config.mjs
+  // into a single lib/client.js, so emitting its sources here would ship a
+  // second, Node-targeted copy that imports browser-only packages and that
+  // nothing loads.
+  "include": ["src/index.ts", "src/bucket.ts", "src/config.ts", "src/gate.ts"]
 }
